@@ -1,0 +1,10 @@
+ID,Name,Minimum Price,Maximum Price,Starting Price,Price Elasticity
+1,Product A,10.99,15.99,12.49,1
+2,Product B,5.49,8.99,6.99,0.8
+3,Product C,20.99,25.99,22.49,1
+4,Product D,15.49,18.99,16.99,1
+5,Product E,8.99,12.99,10.49,0.8
+6,Product F,25.99,30.99,27.49,1
+7,Product G,30.99,35.99,32.49,1
+8,Product H,17.99,22.99,19.99,0.8
+9,Product I,12.99,16.99,14.49,1
