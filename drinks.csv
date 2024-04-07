@@ -1,10 +1,10 @@
-ID,Name,Minimum Price,Maximum Price,Starting Price,Price Elasticity
-1,Product A,10.99,15.99,12.49,1
-2,Product B,5.49,8.99,6.99,0.8
-3,Product C,20.99,25.99,22.49,1
-4,Product D,15.49,18.99,16.99,1
-5,Product E,8.99,12.99,10.49,0.8
-6,Product F,25.99,30.99,27.49,1
-7,Product G,30.99,35.99,32.49,1
-8,Product H,17.99,22.99,19.99,0.8
-9,Product I,12.99,16.99,14.49,1
+Name,Minimum Price,Maximum Price,Starting Price,Short Name,Group,Total Sensitivity,Group Sensitivity,Random Sensitivity,Price Scaling Factor
+Hawaii Bajer,11,16,12,HWIB,1,1,1,1,1
+TeknoTonseren,5,9,7,TETO,1,1,1,1,1
+TUBORG Classic,21,26,22,GOAT,2,1,1,1,1
+Albani Classic,15,19,17,SHIT,2,1,1,1,1
+Pukemon,9,13,10,PUKE,3,1,1,1,1
+Aunt Roberta,26,31,27,AUNT,3,1,1,1,1
+Tequila,31,36,32,TEQL,4,1,1,1,1
+CHIPS,18,23,20,KRRR,5,1,1,1,1
+Vand,13,17,14,SVAG,6,1,1,1,1
