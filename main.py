@@ -1,3 +1,4 @@
+import sys
 import time
 import tkinter as tk
 from PIL import Image, ImageTk
@@ -9,6 +10,15 @@ import os
 import userpaths
 import json
 
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 def load_settings():
     global df
@@ -33,11 +43,12 @@ def load_settings():
 
 save_path = os.path.join(userpaths.get_my_documents(), 'Spruthus-Aktiekurs')
 settings_dict = {}
-with open('settings.json', 'r') as f:
-    settings_dict.update(**json.load(f))
+with open(resource_path('settings.json'), 'r') as f:
+    json_obj = json.load(f)
+    settings_dict.update(**json_obj)
 
 # Load CSV data into a pandas DataFrame
-df = pd.read_csv('drinks.csv')
+df = pd.read_csv(resource_path('drinks.csv'))
 df = df.sort_values('Name')
 
 load_settings()
@@ -245,7 +256,7 @@ def display_background_image(window):
         canvas.delete("graph")
 
         # Load and display the background image
-        bg_image = Image.open("bg.jpg")
+        bg_image = Image.open(resource_path("bg.jpg"))
         bg_photo = ImageTk.PhotoImage(bg_image)
         canvas.create_image(0, 0, image=bg_photo, anchor='nw')
         create_text_with_outline(canvas, width // 2, height // 15, anchor="center",
