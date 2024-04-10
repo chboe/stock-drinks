@@ -41,7 +41,7 @@ def load_settings():
             json.dump(settings_dict, f)
 
 
-save_path = os.path.join(userpaths.get_my_documents(), 'Spruthus-Aktiekurs')
+save_path = os.path.join(userpaths.get_my_documents(), 'Spruthusets-Børs-Brandert')
 settings_dict = {}
 with open(resource_path('settings.json'), 'r') as f:
     json_obj = json.load(f)
@@ -260,7 +260,7 @@ def display_background_image(window):
         bg_photo = ImageTk.PhotoImage(bg_image)
         canvas.create_image(0, 0, image=bg_photo, anchor='nw')
         create_text_with_outline(canvas, width // 2, height // 15, anchor="center",
-                                 text="SPRUTHUS AKTIEKURS", font=("Josefin Sans", 50), fill='white')
+                                 text="Spruthusets Børs Brandert", font=("Josefin Sans", 50), fill='white')
 
         side_padding = 100
         row_base = 200
