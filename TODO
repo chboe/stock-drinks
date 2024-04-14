@@ -1,3 +1,13 @@
-Grå baggrund overlay
-Rework adjust prices
-Scrolling tekst fra phrases.csv
+Ændre titel til Spruthusets Børs Brandert DONE
+Monowidth 7-segment font DONE
+Tilføj decimaler DONE
+tilføj kr til pri DONE
+Ryk shortname+pil til efter graf DONE
+Dobbelt så mange produkter DONE
+Tilføj working mode (Gem eller tidsbaseret) DONE
+
+
+UI til settings og drinks
+Juster algoritme
+Multithread billede generering hvis muligt
+Rullende tekst
