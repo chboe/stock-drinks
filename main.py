@@ -1,10 +1,13 @@
 import sys
 import time
 import tkinter as tk
+import uuid
+import multiprocessing
 from PIL import Image, ImageTk
 import random
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib
 import io
 import os
 import userpaths
@@ -21,15 +24,17 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 def load_settings():
-    global df
+    global drinks_df
     global settings_dict
+    global phrases_df
+
     if not os.path.isdir(save_path):
         os.makedirs(save_path)
     if os.path.exists(os.path.join(save_path, 'drinks.csv')):
-        df = pd.read_csv(os.path.join(save_path, 'drinks.csv'), index_col=None,
-                         dtype=schema)
+        drinks_df = pd.read_csv(os.path.join(save_path, 'drinks.csv'), index_col=None,
+                                dtype=drinks_schema)
     else:
-        df.to_csv(path_or_buf=os.path.join(save_path, 'drinks.csv'), index=False)
+        drinks_df.to_csv(path_or_buf=os.path.join(save_path, 'drinks.csv'), index=False)
 
     if os.path.exists(os.path.join(save_path, 'settings.json')):
         with open(os.path.join(save_path, 'settings.json'), 'r') as f:
@@ -38,29 +43,39 @@ def load_settings():
         with open(os.path.join(save_path, 'settings.json'), 'w') as f:
             json.dump(settings_dict, f)
 
+    if os.path.exists(os.path.join(save_path, 'phrases.csv')):
+        phrases_df = pd.read_csv(os.path.join(save_path, 'phrases.csv'), index_col=None, dtype=phrases_schema)
+    else:
+        phrases_df.to_csv(path_or_buf=os.path.join(save_path, 'phrases.csv'), index=False)
+
 
 save_path = os.path.join(userpaths.get_my_documents(), 'Spruthusets-Børsbrandert')
 settings_dict = {
   "update_frequency": 5,
-  "working_mode": 1
+  "working_mode": 1,
+  "scrolling_text_interval": 30
 }
 
 # Load CSV data into a pandas DataFrame
-schema = {"ID": str, "Name": str, "Minimum Price": float, "Maximum Price": float, "Starting Price": float, "Short Name": str, "Group": int, "Total Sens.": float, "Group Sens.": float, "Rand. Sens.": float, "Price Scal. Fact.": float, "Trend Chg. Prob.": float}
-df = pd.DataFrame(columns=schema.keys()).astype(schema)
+drinks_schema = {"ID": str, "Name": str, "Minimum Price": float, "Maximum Price": float, "Starting Price": float, "Short Name": str, "Group": int, "Total Sens.": float, "Group Sens.": float, "Rand. Sens.": float, "Price Scal. Fact.": float, "Trend Chg. Prob.": float}
+drinks_df = pd.DataFrame(columns=drinks_schema.keys()).astype(drinks_schema)
+
+phrases_schema ={"Phrase": str}
+phrases_df = pd.DataFrame(columns=phrases_schema.keys()).astype(phrases_schema)
 
 load_settings()
 
 # Sample dictionary mapping drink names to lists [minimum price, maximum price, starting price, current price]
-drink_prices = {row['ID']: [row['Starting Price']] * 20 for _, row in df.iterrows()}
-purchases = {row['ID']: 0 for _, row in df.iterrows()}
+drink_prices = {row['ID']: [row['Starting Price']] * 20 for _, row in drinks_df.iterrows()}
+purchases = {row['ID']: 0 for _, row in drinks_df.iterrows()}
 price_vars = {}
 price_vars_str = {}
 canvas = None
-drinks_variables_dict = {}
-
-graph_images = [None] * len(df.index)
-
+graph_queue_out = multiprocessing.Queue()
+graph_queue_in = multiprocessing.Queue()
+graph_images = {}
+current_price_adjustment_count = 0
+matplotlib.use('agg')
 
 def display_settings_window():
     # Function to display settings window
@@ -80,12 +95,19 @@ def display_settings_window():
         # Convert the update frequency to an integer
         settings_dict["update_frequency"] = int(update_frequency_var.get())
 
+        # Convert the update frequency to an integer
+        settings_dict["scrolling_text_interval"] = int(scrolling_text_interval_var.get())
+
         if set_timer:
-            update_background_image(canvas)
+            update_price_image(canvas)
 
         # Save settings to settings.json file
-        with open(os.path.join(save_path, 'settings.json'), 'w') as f:
-            json.dump(settings_dict, f)
+        if os.path.exists(os.path.join(save_path, 'settings.json')):
+            with open(os.path.join(save_path, 'settings.json'), 'r') as f:
+                settings_dict = json.load(f)
+        else:
+            with open(os.path.join(save_path, 'settings.json'), 'w') as f:
+                json.dump(settings_dict, f)
 
         # Close the settings window after saving
         settings_window.destroy()
@@ -114,20 +136,136 @@ def display_settings_window():
     update_frequency_entry = tk.Entry(settings_window, textvariable=update_frequency_var, font=('Arial', 14))
     update_frequency_entry.grid(row=1, column=1, padx=10, pady=5, sticky="e")
 
+    scrolling_text_interval_label = tk.Label(settings_window, text="Nyheds interval:", font=('Arial', 14, 'bold'))
+    scrolling_text_interval_label.grid(row=2, column=0, padx=10, pady=5, sticky="w")
+    scrolling_text_interval_var = tk.IntVar(value=settings_dict["scrolling_text_interval"])
+    scrolling_text_interval_entry = tk.Entry(settings_window, textvariable=scrolling_text_interval_var, font=('Arial', 14))
+    scrolling_text_interval_entry.grid(row=2, column=1, padx=10, pady=5, sticky="e")
+
     # Save button
     save_button = tk.Button(settings_window, text="Gem", font=('Arial', 14, 'bold'), command=save_settings)
-    save_button.grid(row=2, column=0, columnspan=2, padx=10, pady=10)
+    save_button.grid(row=3, column=0, columnspan=2, padx=10, pady=10)
 
     # Configure column widths to be the same
     settings_window.grid_columnconfigure(0, weight=1)
     settings_window.grid_columnconfigure(1, weight=1)
 
+def display_phrases_table():
+    global phrases_df
+
+    def add_phrase_row():
+        # Add a new row for a phrase
+        new_index = len(entries)
+        entry_var = tk.StringVar()
+        entry = tk.Entry(table_frame, textvariable=entry_var, font=('Arial', 14), width=50)  # Adjust width here
+        entry.grid(row=new_index + 1, column=0, padx=5, pady=0)
+        entries.append(entry_var)
+        entry_widgets.append(entry)  # Append the Entry widget to the list
+        delete_buttons.append(
+            tk.Button(table_frame, text="-", font=('Arial', 12), command=lambda i=new_index: delete_phrase_row(i)))
+        delete_buttons[new_index].grid(row=new_index + 1, column=1, padx=5, pady=0)
+
+    def delete_phrase_row(index):
+        # Delete a row for a phrase
+        entries[index].get()
+        entry_widgets[index].grid_forget()
+        delete_buttons[index].grid_forget()
+
+    def save_phrases():
+        global phrases_df
+
+        # Create a list to store new entries
+        new_entries = []
+
+        # Add new entries to the list
+        for entry in entries:
+            new_entries.append({'Phrase': entry.get()})
+
+        # Create a new DataFrame from the list of dictionaries
+        new_phrases_df = pd.DataFrame(new_entries)
+
+        # Save the new DataFrame to CSV
+        new_phrases_df.to_csv(path_or_buf=os.path.join(save_path, 'phrases.csv'), index=False)
+
+        # Update phrases_df with the new DataFrame
+        phrases_df = new_phrases_df
+
+        # Perform subsequent code
+        if os.path.exists(os.path.join(save_path, 'phrases.csv')):
+            phrases_df = pd.read_csv(os.path.join(save_path, 'phrases.csv'), index_col=None, dtype=phrases_schema)
+        else:
+            phrases_df.to_csv(path_or_buf=os.path.join(save_path, 'phrases.csv'), index=False)
+        table_window.destroy()
+
+    # Create a new window
+    table_window = tk.Toplevel()
+    table_window.title("Phrases Table")
+    table_window.geometry("800x600")
+
+    # Create a frame inside the window to hold the table and scrollbar
+    frame = tk.Frame(table_window)
+    frame.pack(fill="both", expand=True)
+
+    # Create a canvas
+    canvas = tk.Canvas(frame)
+    canvas.pack(side="left", fill="both", expand=True)
+
+    # Add a scrollbar
+    scrollbar = tk.Scrollbar(frame, orient="vertical", command=canvas.yview)
+    scrollbar.pack(side="right", fill="y")
+
+    # Configure the canvas
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    # Bind scrollbar to the canvas
+    scrollbar.config(command=canvas.yview)
+
+    # Create another frame inside the canvas to hold the table
+    table_frame = tk.Frame(canvas)
+    canvas.create_window((0, 0), window=table_frame, anchor="nw")
+
+    # Bind canvas scrolling to the scrollbar
+    table_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+    # Get phrases from DataFrame
+    phrases = phrases_df["Phrase"].tolist()
+
+    # Create labels for column headers
+    label = tk.Label(table_frame, text="Nyheder", font=('Arial', 14, 'bold'))
+    label.grid(row=0, column=0)
+
+    # Create entry variables for phrases
+    # Create entry widgets for phrases
+    entries = []
+    entry_widgets = []  # Store entry widgets here
+    delete_buttons = []
+    for i, phrase in enumerate(phrases):
+        entry_var = tk.StringVar(value=phrase)
+        entry = tk.Entry(table_frame, textvariable=entry_var, font=('Arial', 14), width=50)  # Adjust width here
+        entry.grid(row=i + 1, column=0, padx=5, pady=0)
+        entries.append(entry_var)
+        entry_widgets.append(entry)  # Store entry widgets
+        delete_button = tk.Button(table_frame, text="-", font=('Arial', 12),
+                                  command=lambda index=i: delete_phrase_row(index))
+        delete_button.grid(row=i + 1, column=1, padx=5, pady=0, sticky="nsew")
+        delete_buttons.append(delete_button)
+
+    # Add button to add a new phrase
+    new_phrase_button = tk.Button(table_window, text="Ny Linje", font=('Arial', 14, 'bold'), command=add_phrase_row)
+    new_phrase_button.pack(pady=10)
+
+    # Add button to save phrases
+    save_button = tk.Button(table_window, text="Gem", font=('Arial', 14, 'bold'), command=save_phrases)
+    save_button.pack(pady=10)
+
+
 def display_drink_table():
-    global drinks_variables_dict
+    drinks_variables_dict = {}
     # Create a new window
     table_window = tk.Toplevel()
     table_window.title("Drink Table")
     table_window.geometry("1920x1080")
+
 
     # Create a frame inside the window to hold the table and scrollbar
     frame = tk.Frame(table_window)
@@ -150,7 +288,7 @@ def display_drink_table():
     canvas.create_window((0, 0), window=table_frame, anchor="nw")
 
     # Get column names from DataFrame excluding "Current Price"
-    headers = list(schema.keys())[1:]
+    headers = list(drinks_schema.keys())[1:]
 
     # Create labels for column headers
     for col_index, header in enumerate(headers):
@@ -160,8 +298,9 @@ def display_drink_table():
     # Create input fields for each row and column in the DataFrame
 
     row_index = 1
-    def add_row(row_index, series=None):
+    def add_row(series=None):
         new_row = [""] * len(headers)  # Create a new row with empty strings
+        row_uuid = uuid.uuid4()
         for col_index, value in enumerate(new_row):
             if headers[col_index] in ["Name", "Short Name"]:
                 var = tk.StringVar()
@@ -176,7 +315,7 @@ def display_drink_table():
             entry = tk.Entry(table_frame, textvariable=var, font=('Arial', 14), width=15, borderwidth=1, relief="solid")
             entry.grid(row=row_index, column=col_index)  # Corrected the row index here
             # Store the variable in the dictionary by ID and header
-            drinks_variables_dict[(row_index, headers[col_index])] = var
+            drinks_variables_dict[(row_uuid, headers[col_index])] = var
         # Add delete row button for the new row
         delete_button = tk.Button(table_frame, text="-", font=('Arial', 12), command=lambda idx=row_index: delete_row(idx))
         delete_button.grid(row=row_index, column=len(headers) + 1, padx=5, pady=0, sticky="nsew")
@@ -184,9 +323,9 @@ def display_drink_table():
         table_frame.update_idletasks()
         canvas.config(scrollregion=canvas.bbox("all"))
 
-    add_row_button = tk.Button(table_window, text="Ny Drink", font=('Arial', 14, 'bold'), command=lambda idx=row_index: add_row(idx))
+    add_row_button = tk.Button(table_window, text="Ny Linje", font=('Arial', 14, 'bold'), command=lambda idx=row_index: add_row(idx))
     add_row_button.pack(pady=10)
-    for index, row in df.iterrows():
+    for index, row in drinks_df.iterrows():
         add_row(row_index, row)
         row_index += 1
 
@@ -206,21 +345,20 @@ def display_drink_table():
 
     def save_data():
         # Function to save the data from the table to the DataFrame
-        global df
-        df = pd.DataFrame(columns=headers)  # Create an empty DataFrame with columns
+        global drinks_df
+        drinks_df = pd.DataFrame(columns=headers)  # Create an empty DataFrame with columns
         for (row_index, col_name), var in drinks_variables_dict.items():
             value = var.get()  # Get the value from the entry widget
-            df.at[row_index - 1, col_name] = value  # Update the DataFrame with the value
+            drinks_df.at[row_index - 1, col_name] = value  # Update the DataFrame with the value
         # Save the DataFrame to CSV
         save_path = os.path.join(userpaths.get_my_documents(), 'Spruthusets-Børsbrandert')
-        df.to_csv(os.path.join(save_path, 'drinks.csv'), index=False)
+        drinks_df.to_csv(os.path.join(save_path, 'drinks.csv'), index=False)
 
         # Refresh the display_data window
         table_window.destroy()  # Close the current window
-        display_data()  # Reopen the display_data window
 
         # Call update_background_image(False)
-        update_background_image(False)
+        update_price_image(False)
 
     # Save button
     save_button = tk.Button(table_window, text="Gem", font=('Arial', 14, 'bold'), command=save_data)
@@ -259,7 +397,7 @@ def display_data(window):
         # Save counts and update the image if working_mode is 1 or 3
         reset_counts()
         if settings_dict["working_mode"] in [1, 3]:
-            update_background_image(False)
+            update_price_image(False)
 
     # Create window
     window.title("Product Information")
@@ -310,7 +448,7 @@ def display_data(window):
     # Display data in three columns
     count_vars = {}
     total = 0  # Variable to store the total cost
-    for index, row in df.iterrows():
+    for index, row in drinks_df.iterrows():
         id = row['ID']
         name = row['Name']
         minimum_price = int(row['Minimum Price'])  # Convert to integer
@@ -372,76 +510,79 @@ def display_data(window):
                                 width=10)
     settings_button.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
 
+    # Add button to open phrases
+    phrases_button = tk.Button(footer_frame, text="Nyheder", font=('Arial', 16), command=display_phrases_table, width=10)
+    phrases_button.grid(row=1, column=2, padx=10, pady=10, sticky="ew")
+
     # Add button to reset counts
     reset_button = tk.Button(footer_frame, text="Gem", font=('Arial', 16), command=save_and_update_image, width=10)
-    reset_button.grid(row=1, column=2, padx=10, pady=10, sticky="ew")
+    reset_button.grid(row=0, column=2, padx=10, pady=10, sticky="ew")
 
     # Place the footer frame at the bottom of the window
     footer_frame.place(relx=0.5, rely=0.9, anchor=tk.CENTER)
 
 def create_text_with_outline(canvas, x, y, text, font=("Helvetica", 12), fill="white", outline="black", thickness=2,
-                             anchor="center", angle=0):
+                             anchor="center", angle=0, tag="base"):
 
     # Create the outline by drawing slightly shifted text in all 8 directions
     for dx in range(-thickness, thickness + 1):
         for dy in range(-thickness, thickness + 1):
             if abs(dx) + abs(dy) != 0:  # Skip the center text
-                canvas.create_text(x + dx, y + dy, text=text, font=font, fill=outline, anchor=anchor, angle=angle)
+                canvas.create_text(x + dx, y + dy, text=text, font=font, fill=outline, anchor=anchor, angle=angle, tag=tag)
 
     # Create the main text
-    canvas.create_text(x, y, text=text, font=font, fill=fill, anchor=anchor, angle=angle)
+    canvas.create_text(x, y, text=text, font=font, fill=fill, anchor=anchor, angle=angle, tag=tag)
+
 
 def adjust_prices():
-    purchases = {row['ID']: 0 for _, row in df.iterrows()}
+    global current_price_adjustment_count
+    current_price_adjustment_count += 1
     updated_prices = {}
-    total_purchases = sum(purchases.values())
 
     for drink_id, prices in drink_prices.items():
         num_purchases = purchases.get(drink_id, 0)
         latest_price = prices[-1]  # Get the latest price
-        total_sensitivity = df.loc[df['ID'] == drink_id, 'Total Sens.'].iloc[0]
-        random_sensitivity = df.loc[df['ID'] == drink_id, 'Rand. Sens.'].iloc[0]
-        price_scaling_factor = df.loc[df['ID'] == drink_id, 'Price Scal. Fact.'].iloc[0]
+        total_sensitivity = drinks_df.loc[drinks_df['ID'] == drink_id, 'Total Sens.'].iloc[0]
+        random_sensitivity = drinks_df.loc[drinks_df['ID'] == drink_id, 'Rand. Sens.'].iloc[0]
+        group_sensitivity = drinks_df.loc[drinks_df['ID'] == drink_id, 'Group Sens.'].iloc[0]
+        price_scaling_factor = drinks_df.loc[drinks_df['ID'] == drink_id, 'Price Scal. Fact.'].iloc[0]
+        trend_change_prob = drinks_df.loc[drinks_df['ID'] == drink_id, 'Trend Chg. Prob.'].iloc[0]
 
-        # Calculate price change based on total sales and Total Sens.
-        if total_purchases > 0:
-            total_sales_factor = num_purchases / total_purchases
-            total_price_change = total_sales_factor * total_sensitivity
-        else:
-            total_price_change = 0
+        # Calculate total purchases and group sales
+        total_purchases = sum(purchases.values())
+        group = drinks_df.loc[drinks_df['ID'] == drink_id, 'Group'].iloc[0]
+        group_sales = sum(purchases[g] for g in drinks_df[drinks_df['Group'] == group]['ID'])
 
-        # Find the group for the current drink
-        group = df.loc[df['ID'] == drink_id, 'Group'].iloc[0]
+        # Calculate trend based on the latest prices
+        trend = sum(prices[-3:]) / 3
 
-        # Calculate group sales and price change based on group sales and Group Sens.
-        group_sales = sum(purchases[g] for g in df[df['Group'] == group]['ID'])
-        group_sensitivity = df.loc[df['ID'] == drink_id, 'Group Sens.'].iloc[0]
-        if group_sales > 0:
-            group_sales_factor = num_purchases / group_sales
-            group_price_change = group_sales_factor * group_sensitivity
-        else:
-            group_price_change = 0
+        # Adjust price based on total and group sales
+        total_sales_factor = num_purchases / total_purchases if total_purchases > 0 else 0
+        group_sales_factor = num_purchases / group_sales if group_sales > 0 else 0
+        price_change = (total_sales_factor * total_sensitivity) + (group_sales_factor * group_sensitivity)
 
-        # Calculate price change based on random factor and Rand. Sens.
-        random_price_change = random.uniform(-random_sensitivity, random_sensitivity)
+        # Add random factor
+        price_change += random.uniform(-random_sensitivity, random_sensitivity)
 
-        # Calculate final price change
-        price_change = (total_price_change + group_price_change + random_price_change) * price_scaling_factor
+        # Apply trend change with probability
+        if random.random() < trend_change_prob:
+            # If trend is positive, make price_change positive; if trend is negative, make price_change negative
+            price_change = abs(price_change) if trend >= 0 else -abs(price_change)
 
-        # Update the new price based on the latest price
-        new_price = latest_price * (1 + price_change)
+        # Calculate new price
+        new_price = latest_price * (1 + price_change * price_scaling_factor)
 
-        # Ensure the new price stays within the specified range
-        minimum_price = df.loc[df['ID'] == drink_id, 'Minimum Price'].iloc[0]
-        maximum_price = df.loc[df['ID'] == drink_id, 'Maximum Price'].iloc[0]
+        # Ensure new price stays within range
+        minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Minimum Price'].iloc[0]
+        maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Maximum Price'].iloc[0]
         new_price = max(minimum_price, min(new_price, maximum_price))
         new_price = round(new_price, 2)
 
-        # Update the tkinter variable with the new price
+        # Update tkinter variable with new price
         price_vars[drink_id].set(new_price)
         price_vars_str[drink_id].set("{:.2f}".format(new_price))
 
-        # Append the new price to the list and remove the oldest price if the list exceeds 20 items
+        # Append new price to list and remove oldest if exceeds limit
         prices.append(new_price)
         if len(prices) > 20:
             prices.pop(0)
@@ -449,6 +590,38 @@ def adjust_prices():
         updated_prices[drink_id] = new_price
 
     return updated_prices
+
+def get_graph_image_process(queue_in, queue_out):
+    while True:
+        try:
+            q_res = queue_in.get()
+        except:
+            q_res = None
+        if q_res is not None:
+            queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, minimum_price, maximum_price, drink_prices = q_res
+            # Create a fig
+            fig, ax = plt.subplots(figsize=(graph_width // 5, graph_height // 5))
+
+            # Plot price history on the existing figure
+            last_5_prices = drink_prices[drink_id][-5:]
+            xs = range(len(last_5_prices))
+            ys = last_5_prices
+            ax.plot(xs, ys, marker='', linewidth=130, color='black')
+            ax.plot(xs, ys, marker='', linewidth=70, color='white')
+            ax.set_ylim(minimum_price - 3, maximum_price + 3)
+            ax.axis('off')
+            plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+            plt.tight_layout()
+
+            # Save the figure as a PNG image
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', transparent=True)
+            buf.seek(0)
+            plt.close(fig)
+
+            graph_image = Image.open(buf)
+            resized_graph_image = graph_image.resize((graph_width, graph_height), Image.Resampling.LANCZOS)
+            queue_out.put((queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, resized_graph_image))
 
 def get_price_image():
     width = 1920
@@ -488,8 +661,8 @@ def get_price_image():
         column_base = column_bases[column_idx]
         row_position = row_base + row_idx * row_height
 
-        name = df.loc[df['ID'] == drink_id, 'Name'].iloc[0]
-        short_name = df.loc[df['ID'] == drink_id, 'Short Name'].iloc[0]
+        name = drinks_df.loc[drinks_df['ID'] == drink_id, 'Name'].iloc[0]
+        short_name = drinks_df.loc[drinks_df['ID'] == drink_id, 'Short Name'].iloc[0]
         current_price = prices[drink_id]
 
         # Get the previous price from the list of prices
@@ -526,55 +699,65 @@ def get_price_image():
         create_text_with_outline(canvas, column_base + 545, row_position - 20,
                                  anchor="e", text=f"DKK", font=("Josefin Sans", 16), fill='white')
 
+        canvas.image = bg_photo
         # Graph size
         graph_width = 100
         graph_height = 40
         graph_x = column_base + 240
         graph_y = row_position - 25
 
-        # Create a fig
-        fig, ax = plt.subplots(figsize=(graph_width // 5, graph_height // 5))
-
-        # Plot price history on the existing figure
-        last_5_prices = drink_prices[drink_id][-5:]
-        xs = range(len(last_5_prices))
-        ys = last_5_prices
-        ax.plot(xs, ys, marker='', linewidth=130, color='black')
-        ax.plot(xs, ys, marker='', linewidth=70, color='white')
-
-        minimum_price = df.loc[df['ID'] == drink_id, 'Minimum Price'].iloc[0]
-        maximum_price = df.loc[df['ID'] == drink_id, 'Maximum Price'].iloc[0]
-        ax.set_ylim(minimum_price - 3, maximum_price + 3)
-
-        ax.axis('off')
-        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-        plt.tight_layout()
-
-        # Save the figure as a PNG image
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', transparent=True)
-        buf.seek(0)
-
-        graph_image = Image.open(buf)
-        resized_graph_image = graph_image.resize((graph_width, graph_height), Image.Resampling.LANCZOS)
-
-        # Convert the resized image to a Tkinter PhotoImage object
-        graph_photo = ImageTk.PhotoImage(resized_graph_image)
+        maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Maximum Price'].iloc[0]
+        minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Minimum Price'].iloc[0]
 
         # Overlay the grey box underneath the graph image
         canvas.create_rectangle(graph_x - 2, graph_y - 2, graph_x + graph_width + 4, graph_y + graph_height + 4,
                                 fill='gray50', outline='black', width=2, stipple='gray25')
 
-        # Overlay the graph onto the canvas
-        canvas.create_image(graph_x, graph_y, image=graph_photo, anchor='nw')
-        graph_images[idx] = graph_photo
-        plt.close(fig)
 
-    canvas.image = bg_photo
-def update_background_image(queue_timer):
+        # Overlay the grey box underneath the graph image
+        canvas.create_rectangle(0, 980, 1920, 1080, fill='gray50', outline='black', width=2, stipple='gray25')
+
+        graph_queue_in.put((current_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, minimum_price, maximum_price, drink_prices))
+
+def consume_from_queue():
+    global graph_queue_out
+    global canvas
+    try:
+        q_res = graph_queue_out.get_nowait()
+    except:
+        q_res = None
+    if q_res is not None:
+        queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, resized_graph_image = q_res
+        if queued_price_adjustment_count == current_price_adjustment_count:
+            # Convert the resized image to a Tkinter PhotoImage object
+            graph_photo = ImageTk.PhotoImage(resized_graph_image)
+            graph_images[drink_id] = graph_photo
+            canvas.create_image(graph_x, graph_y, image=graph_photo, anchor='nw')
+    canvas.after(10, consume_from_queue)
+
+def update_price_image(queue_timer):
     get_price_image()
     if queue_timer and settings_dict["working_mode"] > 1:
-        canvas.after(settings_dict["update_frequency"] * 1000, update_background_image, True)
+        canvas.after(settings_dict["update_frequency"] * 1000, update_price_image, True)
+
+
+def scroll_text(text, x):
+    canvas.delete("SCROLLING_TEXT")
+    if x > -1000:
+        create_text_with_outline(canvas, x, 1010, anchor="w", text=f"{text}", font=("Josefin Sans", 40), fill='white', tag="SCROLLING_TEXT")
+        canvas.after(25, scroll_text, text, x-3)
+
+def init_scrolling_text():
+    global phrases_df
+
+    # Select a random row from the DataFrame
+    random_row = random.choice(phrases_df.index)
+    random_phrase = phrases_df.loc[random_row, "Phrase"]  # Adjusted column name
+
+    scroll_text(random_phrase, 2000)
+
+    canvas.after(settings_dict["scrolling_text_interval"]*1000, init_scrolling_text)
+
 
 def display_background_image(window):
     global canvas
@@ -587,17 +770,24 @@ def display_background_image(window):
     canvas.pack()
 
     # Schedule the update of the background image
-    update_background_image(canvas)
+    update_price_image(canvas)
+    canvas.after(10, consume_from_queue)
+    canvas.after(10, init_scrolling_text)
+
 
     window.mainloop()
 
 
 def main():
+    # Start graph computation process
+    graph_process = multiprocessing.Process(target=get_graph_image_process, args=[graph_queue_in, graph_queue_out])
+    graph_process.start()
+
     # Create main Tkinter window
     root = tk.Tk()
     root.title("Main Window")
     root.geometry("1920x1080")
-    for index, row in df.iterrows():
+    for index, row in drinks_df.iterrows():
         id = str(row['ID'])  # Convert name to string
         price_vars.update({id: tk.IntVar(value=int(row['Starting Price']))})  # Convert to integer
         price_vars_str.update({id: tk.StringVar(value="{:.2f}".format(row['Starting Price']))})
@@ -609,6 +799,9 @@ def main():
 
     # Start the main event loop
     root.mainloop()
+
+    graph_process.terminate()
+    graph_process.join()  # Wait for the process to terminate before exiting
 
 
 if __name__ == "__main__":
