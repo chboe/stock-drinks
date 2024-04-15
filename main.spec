@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('bg.jpg', '.'), ('settings.json', '.'), ('drinks.csv', '.')],
+    datas=[('bg.jpg', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

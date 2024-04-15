@@ -57,7 +57,7 @@ settings_dict = {
 }
 
 # Load CSV data into a pandas DataFrame
-drinks_schema = {"ID": str, "Name": str, "Minimum Price": float, "Maximum Price": float, "Starting Price": float, "Short Name": str, "Group": int, "Total Sens.": float, "Group Sens.": float, "Rand. Sens.": float, "Price Scal. Fact.": float, "Trend Chg. Prob.": float}
+drinks_schema = {"ID": str, "Name": str, "Min. Price": float, "Max. Price": float, "Starting Price": float, "Short Name": str, "Group": int, "Total Sens.": float, "Group Sens.": float, "Rand. Sens.": float, "Price Scal. Fact.": float, "Trend Chg. Prob.": float}
 drinks_df = pd.DataFrame(columns=drinks_schema.keys()).astype(drinks_schema)
 
 phrases_schema ={"Phrase": str}
@@ -71,6 +71,7 @@ purchases = {row['ID']: 0 for _, row in drinks_df.iterrows()}
 price_vars = {}
 price_vars_str = {}
 canvas = None
+root = None
 graph_queue_out = multiprocessing.Queue()
 graph_queue_in = multiprocessing.Queue()
 graph_images = {}
@@ -167,7 +168,7 @@ def display_phrases_table():
 
     def delete_phrase_row(index):
         # Delete a row for a phrase
-        entries[index].get()
+        entries.pop(index)  # Remove the entry variable at the specified index
         entry_widgets[index].grid_forget()
         delete_buttons[index].grid_forget()
 
@@ -260,12 +261,90 @@ def display_phrases_table():
 
 
 def display_drink_table():
-    drinks_variables_dict = {}
+    global drinks_df
+    global drinks_schema
+
+    column_widths = [15, 10, 10, 15, 10, 5, 15, 15, 15, 15, 15]  # Define widths for each column (excluding the first column)
+
+    def add_drink_row():
+        # Add a new row for a phrase
+        new_index = len(entries)
+        entry_var_list = []
+        entry_var_list.append(uuid.uuid4())
+        for col_index, header in enumerate(headers, start=1):  # Exclude the first column
+            entry_var = tk.StringVar()
+            width = column_widths[col_index - 1]  # Get width from the list based on column index
+            entry = tk.Entry(table_frame, textvariable=entry_var, font=('Arial', 14), width=width)
+            entry.grid(row=new_index + 1, column=col_index, padx=5, pady=0)
+            entry_var_list.append(entry_var)
+            entry_widgets.append(entry)  # Append the Entry widget to the list
+        entries.append(entry_var_list)
+
+        delete_button = tk.Button(table_frame, text="-", font=('Arial', 12), command=lambda i=new_index: delete_drink_row(i))
+        delete_button.grid(row=new_index + 1, column=len(headers)+1, padx=5, pady=0, sticky="nsew")
+        delete_buttons.append(delete_button)
+
+    def delete_drink_row(index):
+        # Delete a row for a phrase
+        entries.pop(index)
+        for entry_widget in entry_widgets[index]:
+            entry_widget.grid_forget()
+        delete_buttons[index].grid_forget()
+
+    def save_drinks():
+        def show_validation_error(column_name, drink_name):
+            top = tk.Toplevel(table_window)
+            top.geometry("600x50")
+            top.title("Valideringsfejl")
+            error_message = f"Valideringsfejl for  '{drink_name}'. Værdien '{column_name}' er ikke korrekt."
+            label = tk.Label(top, text=error_message, font=('Arial', 14, 'bold'))
+            label.pack()
+
+        global drinks_df
+        global root
+
+        # Create a list to store new entries
+        new_entries = []
+
+        # Add new entries to the list and perform type casting and validation
+        for entry_list in entries:
+            new_entry = {}
+            new_entry["ID"] = entry_list[0]
+            for col_index, (header, entry_var) in enumerate(zip(headers, entry_list[1:]), start=1):
+                value = entry_var.get()
+                try:
+                    # Perform type casting based on the schema
+                    if drinks_schema[header] == str:
+                        new_entry[header] = str(value)
+                    elif drinks_schema[header] == int:
+                        new_entry[header] = int(value)
+                    elif drinks_schema[header] == float:
+                        new_entry[header] = float(value)
+                    else:
+                        new_entry[header] = value
+                except ValueError:
+                    # Validation failed, show error message
+                    show_validation_error(header, new_entry["Name"])
+                    return
+            new_entries.append(new_entry)
+
+        # Create a new DataFrame from the list of dictionaries
+        new_drinks_df = pd.DataFrame(new_entries)
+
+        # Save the new DataFrame to CSV
+        new_drinks_df.to_csv(path_or_buf=os.path.join(save_path, 'drinks.csv'), index=False)
+
+        # Update drinks_df with the new DataFrame
+        drinks_df = new_drinks_df
+
+        # Destroy the table window
+        root.destroy()
+
+
     # Create a new window
     table_window = tk.Toplevel()
     table_window.title("Drink Table")
     table_window.geometry("1920x1080")
-
 
     # Create a frame inside the window to hold the table and scrollbar
     frame = tk.Frame(table_window)
@@ -281,92 +360,51 @@ def display_drink_table():
 
     # Configure the canvas
     canvas.configure(yscrollcommand=scrollbar.set)
-    canvas.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
     # Create another frame inside the canvas to hold the table
     table_frame = tk.Frame(canvas)
     canvas.create_window((0, 0), window=table_frame, anchor="nw")
 
-    # Get column names from DataFrame excluding "Current Price"
+    # Bind canvas scrolling to the scrollbar
+    table_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+    # Get column names from DataFrame excluding the first column (ID)
     headers = list(drinks_schema.keys())[1:]
 
     # Create labels for column headers
     for col_index, header in enumerate(headers):
         label = tk.Label(table_frame, text=header, font=('Arial', 14, 'bold'))
-        label.grid(row=0, column=col_index)
+        label.grid(row=0, column=col_index + 1, padx=5, pady=0)
 
-    # Create input fields for each row and column in the DataFrame
+    # Create a list to hold the drinks data
+    entries = []
+    entry_widgets = [[] for _ in range(len(drinks_df))]
+    delete_buttons = []
 
-    row_index = 1
-    def add_row(series=None):
-        new_row = [""] * len(headers)  # Create a new row with empty strings
-        row_uuid = uuid.uuid4()
-        for col_index, value in enumerate(new_row):
-            if headers[col_index] in ["Name", "Short Name"]:
-                var = tk.StringVar()
-            elif headers[col_index] in ["Group"]:
-                var = tk.IntVar()
-            else:
-                var = tk.DoubleVar()
+    # Add existing drinks data
+    for i, row in drinks_df.iterrows():
+        entry_var_list = []
+        entry_var_list.append(str(uuid.uuid4()))
+        for col_index, header in enumerate(headers, start=1):  # Exclude the first column
+            entry_var = tk.StringVar(value=row[header])
+            width = column_widths[col_index - 1]  # Get width from the list based on column index
+            entry = tk.Entry(table_frame, textvariable=entry_var, font=('Arial', 14), width=width)
+            entry.grid(row=i + 1, column=col_index, padx=5, pady=0)
+            entry_var_list.append(entry_var)
+            entry_widgets[i].append(entry)  # Store entry widgets
+        entries.append(entry_var_list)
+        delete_button = tk.Button(table_frame, text="-", font=('Arial', 12),
+                                  command=lambda index=i: delete_drink_row(index))
+        delete_button.grid(row=i + 1, column=len(headers)+1, padx=5, pady=0, sticky="nsew")
+        delete_buttons.append(delete_button)
 
-            if series is not None:
-                var.set(series[headers[col_index]])
+    # Add button to add a new drink
+    new_drink_button = tk.Button(table_window, text="Ny Linje", font=('Arial', 14, 'bold'), command=add_drink_row)
+    new_drink_button.pack(pady=10)
 
-            entry = tk.Entry(table_frame, textvariable=var, font=('Arial', 14), width=15, borderwidth=1, relief="solid")
-            entry.grid(row=row_index, column=col_index)  # Corrected the row index here
-            # Store the variable in the dictionary by ID and header
-            drinks_variables_dict[(row_uuid, headers[col_index])] = var
-        # Add delete row button for the new row
-        delete_button = tk.Button(table_frame, text="-", font=('Arial', 12), command=lambda idx=row_index: delete_row(idx))
-        delete_button.grid(row=row_index, column=len(headers) + 1, padx=5, pady=0, sticky="nsew")
-        # Update the canvas scrolling region after adding a new row
-        table_frame.update_idletasks()
-        canvas.config(scrollregion=canvas.bbox("all"))
-
-    add_row_button = tk.Button(table_window, text="Ny Linje", font=('Arial', 14, 'bold'), command=lambda idx=row_index: add_row(idx))
-    add_row_button.pack(pady=10)
-    for index, row in drinks_df.iterrows():
-        add_row(row_index, row)
-        row_index += 1
-
-    # Update the canvas scrolling region
-    table_frame.update_idletasks()
-    canvas.config(scrollregion=canvas.bbox("all"))
-
-    def delete_row(row_index):
-        # Function to delete the specified row
-        for col_name in headers:
-            # Remove the variable from the dictionary by ID and header
-            del drinks_variables_dict[(row_index, col_name)]
-        table_frame.grid_slaves(row=row_index)[0].grid_forget()  # Forget the widgets in the specified row
-        # Update the canvas scrolling region after deleting the row
-        table_frame.update_idletasks()
-        canvas.config(scrollregion=canvas.bbox("all"))
-
-    def save_data():
-        # Function to save the data from the table to the DataFrame
-        global drinks_df
-        drinks_df = pd.DataFrame(columns=headers)  # Create an empty DataFrame with columns
-        for (row_index, col_name), var in drinks_variables_dict.items():
-            value = var.get()  # Get the value from the entry widget
-            drinks_df.at[row_index - 1, col_name] = value  # Update the DataFrame with the value
-        # Save the DataFrame to CSV
-        save_path = os.path.join(userpaths.get_my_documents(), 'Spruthusets-Børsbrandert')
-        drinks_df.to_csv(os.path.join(save_path, 'drinks.csv'), index=False)
-
-        # Refresh the display_data window
-        table_window.destroy()  # Close the current window
-
-        # Call update_background_image(False)
-        update_price_image(False)
-
-    # Save button
-    save_button = tk.Button(table_window, text="Gem", font=('Arial', 14, 'bold'), command=save_data)
+    # Add button to save drinks
+    save_button = tk.Button(table_window, text="Gem", font=('Arial', 14, 'bold'), command=save_drinks)
     save_button.pack(pady=10)
-
-    # Configure column widths to be the same
-    table_window.grid_columnconfigure(0, weight=1)
-    table_window.grid_columnconfigure(1, weight=1)
 
 def display_data(window):
     # Function to display data in a new window
@@ -451,8 +489,8 @@ def display_data(window):
     for index, row in drinks_df.iterrows():
         id = row['ID']
         name = row['Name']
-        minimum_price = int(row['Minimum Price'])  # Convert to integer
-        maximum_price = int(row['Maximum Price'])  # Convert to integer
+        minimum_price = int(row['Min. Price'])  # Convert to integer
+        maximum_price = int(row['Max. Price'])  # Convert to integer
         # Fetch current price from the dictionary
         current_price_var_str = price_vars_str[id]
         current_price_var = price_vars[id]
@@ -573,8 +611,8 @@ def adjust_prices():
         new_price = latest_price * (1 + price_change * price_scaling_factor)
 
         # Ensure new price stays within range
-        minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Minimum Price'].iloc[0]
-        maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Maximum Price'].iloc[0]
+        minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Min. Price'].iloc[0]
+        maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Max. Price'].iloc[0]
         new_price = max(minimum_price, min(new_price, maximum_price))
         new_price = round(new_price, 2)
 
@@ -706,8 +744,8 @@ def get_price_image():
         graph_x = column_base + 240
         graph_y = row_position - 25
 
-        maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Maximum Price'].iloc[0]
-        minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Minimum Price'].iloc[0]
+        maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Max. Price'].iloc[0]
+        minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Min. Price'].iloc[0]
 
         # Overlay the grey box underneath the graph image
         canvas.create_rectangle(graph_x - 2, graph_y - 2, graph_x + graph_width + 4, graph_y + graph_height + 4,
@@ -779,6 +817,7 @@ def display_background_image(window):
 
 
 def main():
+    global root
     # Start graph computation process
     graph_process = multiprocessing.Process(target=get_graph_image_process, args=[graph_queue_in, graph_queue_out])
     graph_process.start()
