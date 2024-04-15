@@ -789,12 +789,13 @@ def init_scrolling_text():
     global phrases_df
 
     # Select a random row from the DataFrame
-    random_row = random.choice(phrases_df.index)
-    random_phrase = phrases_df.loc[random_row, "Phrase"]  # Adjusted column name
+    if len(phrases_df.index) > 0:
+        random_row = random.choice(phrases_df.index)
+        random_phrase = phrases_df.loc[random_row, "Phrase"]  # Adjusted column name
 
-    scroll_text(random_phrase, 2000)
+        scroll_text(random_phrase, 2000)
 
-    canvas.after(settings_dict["scrolling_text_interval"]*1000, init_scrolling_text)
+        canvas.after(settings_dict["scrolling_text_interval"]*1000, init_scrolling_text)
 
 
 def display_background_image(window):
@@ -844,4 +845,7 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.platform.startswith('win'):
+        # On Windows calling this function is necessary.
+        multiprocessing.freeze_support()
     main()
