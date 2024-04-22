@@ -13,6 +13,7 @@ import os
 import userpaths
 import json
 
+
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
@@ -22,6 +23,7 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
+
 
 def load_settings():
     global drinks_df
@@ -51,16 +53,19 @@ def load_settings():
 
 save_path = os.path.join(userpaths.get_my_documents(), 'Spruthusets-Børsbrandert')
 settings_dict = {
-  "update_frequency": 5,
-  "working_mode": 1,
-  "scrolling_text_interval": 30
+    "update_frequency": 5,
+    "working_mode": 1,
+    "scrolling_text_interval": 30,
+    "graph_update_delay": 1
 }
 
 # Load CSV data into a pandas DataFrame
-drinks_schema = {"ID": str, "Name": str, "Min. Price": float, "Max. Price": float, "Starting Price": float, "Short Name": str, "Group": int, "Total Sens.": float, "Group Sens.": float, "Rand. Sens.": float, "Price Scal. Fact.": float, "Trend Chg. Prob.": float}
+drinks_schema = {"ID": str, "Name": str, "Min. Price": float, "Max. Price": float, "Starting Price": float,
+                 "Short Name": str, "Group": int, "Price Decay": float, "Main Change": float, "Group Change": float,
+                 "Reset Interval": float, "Reset pct.": float}
 drinks_df = pd.DataFrame(columns=drinks_schema.keys()).astype(drinks_schema)
 
-phrases_schema ={"Phrase": str}
+phrases_schema = {"Phrase": str}
 phrases_df = pd.DataFrame(columns=phrases_schema.keys()).astype(phrases_schema)
 
 load_settings()
@@ -77,6 +82,7 @@ graph_queue_in = multiprocessing.Queue()
 graph_images = {}
 current_price_adjustment_count = 0
 matplotlib.use('agg')
+
 
 def display_settings_window():
     # Function to display settings window
@@ -140,7 +146,8 @@ def display_settings_window():
     scrolling_text_interval_label = tk.Label(settings_window, text="Nyheds interval:", font=('Arial', 14, 'bold'))
     scrolling_text_interval_label.grid(row=2, column=0, padx=10, pady=5, sticky="w")
     scrolling_text_interval_var = tk.IntVar(value=settings_dict["scrolling_text_interval"])
-    scrolling_text_interval_entry = tk.Entry(settings_window, textvariable=scrolling_text_interval_var, font=('Arial', 14))
+    scrolling_text_interval_entry = tk.Entry(settings_window, textvariable=scrolling_text_interval_var,
+                                             font=('Arial', 14))
     scrolling_text_interval_entry.grid(row=2, column=1, padx=10, pady=5, sticky="e")
 
     # Save button
@@ -150,6 +157,7 @@ def display_settings_window():
     # Configure column widths to be the same
     settings_window.grid_columnconfigure(0, weight=1)
     settings_window.grid_columnconfigure(1, weight=1)
+
 
 def display_phrases_table():
     global phrases_df
@@ -264,7 +272,8 @@ def display_drink_table():
     global drinks_df
     global drinks_schema
 
-    column_widths = [15, 10, 10, 15, 10, 5, 15, 15, 15, 15, 15]  # Define widths for each column (excluding the first column)
+    column_widths = [15, 10, 10, 15, 10, 5, 15, 15, 15, 15,
+                     15]  # Define widths for each column (excluding the first column)
 
     def add_drink_row():
         # Add a new row for a phrase
@@ -280,8 +289,9 @@ def display_drink_table():
             entry_widgets.append(entry)  # Append the Entry widget to the list
         entries.append(entry_var_list)
 
-        delete_button = tk.Button(table_frame, text="-", font=('Arial', 12), command=lambda i=new_index: delete_drink_row(i))
-        delete_button.grid(row=new_index + 1, column=len(headers)+1, padx=5, pady=0, sticky="nsew")
+        delete_button = tk.Button(table_frame, text="-", font=('Arial', 12),
+                                  command=lambda i=new_index: delete_drink_row(i))
+        delete_button.grid(row=new_index + 1, column=len(headers) + 1, padx=5, pady=0, sticky="nsew")
         delete_buttons.append(delete_button)
 
     def delete_drink_row(index):
@@ -340,7 +350,6 @@ def display_drink_table():
         # Destroy the table window
         root.destroy()
 
-
     # Create a new window
     table_window = tk.Toplevel()
     table_window.title("Drink Table")
@@ -395,7 +404,7 @@ def display_drink_table():
         entries.append(entry_var_list)
         delete_button = tk.Button(table_frame, text="-", font=('Arial', 12),
                                   command=lambda index=i: delete_drink_row(index))
-        delete_button.grid(row=i + 1, column=len(headers)+1, padx=5, pady=0, sticky="nsew")
+        delete_button.grid(row=i + 1, column=len(headers) + 1, padx=5, pady=0, sticky="nsew")
         delete_buttons.append(delete_button)
 
     # Add button to add a new drink
@@ -405,6 +414,7 @@ def display_drink_table():
     # Add button to save drinks
     save_button = tk.Button(table_window, text="Gem", font=('Arial', 14, 'bold'), command=save_drinks)
     save_button.pack(pady=10)
+
 
 def display_data(window):
     # Function to display data in a new window
@@ -549,7 +559,8 @@ def display_data(window):
     settings_button.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
 
     # Add button to open phrases
-    phrases_button = tk.Button(footer_frame, text="Nyheder", font=('Arial', 16), command=display_phrases_table, width=10)
+    phrases_button = tk.Button(footer_frame, text="Nyheder", font=('Arial', 16), command=display_phrases_table,
+                               width=10)
     phrases_button.grid(row=1, column=2, padx=10, pady=10, sticky="ew")
 
     # Add button to reset counts
@@ -559,14 +570,15 @@ def display_data(window):
     # Place the footer frame at the bottom of the window
     footer_frame.place(relx=0.5, rely=0.9, anchor=tk.CENTER)
 
+
 def create_text_with_outline(canvas, x, y, text, font=("Helvetica", 12), fill="white", outline="black", thickness=2,
                              anchor="center", angle=0, tag="base"):
-
     # Create the outline by drawing slightly shifted text in all 8 directions
     for dx in range(-thickness, thickness + 1):
         for dy in range(-thickness, thickness + 1):
             if abs(dx) + abs(dy) != 0:  # Skip the center text
-                canvas.create_text(x + dx, y + dy, text=text, font=font, fill=outline, anchor=anchor, angle=angle, tag=tag)
+                canvas.create_text(x + dx, y + dy, text=text, font=font, fill=outline, anchor=anchor, angle=angle,
+                                   tag=tag)
 
     # Create the main text
     canvas.create_text(x, y, text=text, font=font, fill=fill, anchor=anchor, angle=angle, tag=tag)
@@ -577,42 +589,45 @@ def adjust_prices():
     current_price_adjustment_count += 1
     updated_prices = {}
 
+    # Find the most sold item and its group
+    if len(purchases) > 0:
+        most_sold_item_id = max(purchases, key=purchases.get)
+        most_sold_group = drinks_df.loc[drinks_df['ID'] == most_sold_item_id, 'Group'].iloc[0]
+
     for drink_id, prices in drink_prices.items():
-        num_purchases = purchases.get(drink_id, 0)
         latest_price = prices[-1]  # Get the latest price
-        total_sensitivity = drinks_df.loc[drinks_df['ID'] == drink_id, 'Total Sens.'].iloc[0]
-        random_sensitivity = drinks_df.loc[drinks_df['ID'] == drink_id, 'Rand. Sens.'].iloc[0]
-        group_sensitivity = drinks_df.loc[drinks_df['ID'] == drink_id, 'Group Sens.'].iloc[0]
-        price_scaling_factor = drinks_df.loc[drinks_df['ID'] == drink_id, 'Price Scal. Fact.'].iloc[0]
-        trend_change_prob = drinks_df.loc[drinks_df['ID'] == drink_id, 'Trend Chg. Prob.'].iloc[0]
 
-        # Calculate total purchases and group sales
-        total_purchases = sum(purchases.values())
-        group = drinks_df.loc[drinks_df['ID'] == drink_id, 'Group'].iloc[0]
-        group_sales = sum(purchases[g] for g in drinks_df[drinks_df['Group'] == group]['ID'])
-
-        # Calculate trend based on the latest prices
-        trend = sum(prices[-3:]) / 3
-
-        # Adjust price based on total and group sales
-        total_sales_factor = num_purchases / total_purchases if total_purchases > 0 else 0
-        group_sales_factor = num_purchases / group_sales if group_sales > 0 else 0
-        price_change = (total_sales_factor * total_sensitivity) + (group_sales_factor * group_sensitivity)
-
-        # Add random factor
-        price_change += random.uniform(-random_sensitivity, random_sensitivity)
-
-        # Apply trend change with probability
-        if random.random() < trend_change_prob:
-            # If trend is positive, make price_change positive; if trend is negative, make price_change negative
-            price_change = abs(price_change) if trend >= 0 else -abs(price_change)
-
-        # Calculate new price
-        new_price = latest_price * (1 + price_change * price_scaling_factor)
-
+        # Get drink information
         # Ensure new price stays within range
         minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Min. Price'].iloc[0]
         maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Max. Price'].iloc[0]
+        start_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Starting Price'].iloc[0]
+        reset_interval = drinks_df.loc[drinks_df['ID'] == drink_id, 'Reset Interval'].iloc[0]
+        reset_pct = drinks_df.loc[drinks_df['ID'] == drink_id, 'Reset pct.'].iloc[0]
+
+        # Define random ranges for changes
+        main_change_range = drinks_df.loc[drinks_df['ID'] == drink_id, 'Main Change'].iloc[0]
+        group_change_range = drinks_df.loc[drinks_df['ID'] == drink_id, 'Group Change'].iloc[0]
+        price_decay_range = drinks_df.loc[drinks_df['ID'] == drink_id, 'Price Decay'].iloc[0]
+
+        # Apply random changes within the specified ranges
+        main_change = random.uniform(0, main_change_range)
+        group_change = random.uniform(0, group_change_range)
+        price_decay = random.uniform(0, price_decay_range)
+
+        # Increase price for most sold item and its group
+        if len(purchases) > 0 and drink_id == most_sold_item_id:
+            new_price = latest_price * (1 + main_change * start_price)
+        elif len(purchases) > 0 and drinks_df.loc[drinks_df['ID'] == drink_id, 'Group'].iloc[0] == most_sold_group:
+            new_price = latest_price * (1 + group_change * start_price)
+        else:
+            # Decrease price based on price decay
+            new_price = latest_price * (1 - price_decay)
+
+        # Check if price exceeds reset percentage above maximum or below minimum
+        if new_price > maximum_price * (1 + reset_pct) or new_price < minimum_price * (1 - reset_pct):
+            new_price = start_price + random.uniform(-reset_interval, reset_interval) * start_price
+
         new_price = max(minimum_price, min(new_price, maximum_price))
         new_price = round(new_price, 2)
 
@@ -628,6 +643,7 @@ def adjust_prices():
         updated_prices[drink_id] = new_price
 
     return updated_prices
+
 
 def get_graph_image_process(queue_in, queue_out):
     while True:
@@ -659,7 +675,9 @@ def get_graph_image_process(queue_in, queue_out):
 
             graph_image = Image.open(buf)
             resized_graph_image = graph_image.resize((graph_width, graph_height), Image.Resampling.LANCZOS)
-            queue_out.put((queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, resized_graph_image))
+            queue_out.put((queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height,
+                           resized_graph_image))
+
 
 def get_price_image():
     width = 1920
@@ -751,11 +769,14 @@ def get_price_image():
         canvas.create_rectangle(graph_x - 2, graph_y - 2, graph_x + graph_width + 4, graph_y + graph_height + 4,
                                 fill='gray50', outline='black', width=2, stipple='gray25')
 
-
         # Overlay the grey box underneath the graph image
         canvas.create_rectangle(0, 980, 1920, 1080, fill='gray50', outline='black', width=2, stipple='gray25')
 
-        graph_queue_in.put((current_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, minimum_price, maximum_price, drink_prices))
+        graph_queue_in.put((current_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height,
+                            minimum_price, maximum_price, drink_prices))
+
+        canvas.after(settings_dict["graph_update_delay"] * 1000, consume_from_queue)
+
 
 def consume_from_queue():
     global graph_queue_out
@@ -771,7 +792,8 @@ def consume_from_queue():
             graph_photo = ImageTk.PhotoImage(resized_graph_image)
             graph_images[drink_id] = graph_photo
             canvas.create_image(graph_x, graph_y, image=graph_photo, anchor='nw')
-    canvas.after(10, consume_from_queue)
+        consume_from_queue()
+
 
 def update_price_image(queue_timer):
     get_price_image()
@@ -782,8 +804,10 @@ def update_price_image(queue_timer):
 def scroll_text(text, x):
     canvas.delete("SCROLLING_TEXT")
     if x > -1000:
-        create_text_with_outline(canvas, x, 1010, anchor="w", text=f"{text}", font=("Josefin Sans", 40), fill='white', tag="SCROLLING_TEXT")
-        canvas.after(25, scroll_text, text, x-3)
+        create_text_with_outline(canvas, x, 1010, anchor="w", text=f"{text}", font=("Josefin Sans", 40), fill='white',
+                                 tag="SCROLLING_TEXT")
+        canvas.after(25, scroll_text, text, x - 3)
+
 
 def init_scrolling_text():
     global phrases_df
@@ -795,7 +819,7 @@ def init_scrolling_text():
 
         scroll_text(random_phrase, 2000)
 
-        canvas.after(settings_dict["scrolling_text_interval"]*1000, init_scrolling_text)
+        canvas.after(settings_dict["scrolling_text_interval"] * 1000, init_scrolling_text)
 
 
 def display_background_image(window):
@@ -812,7 +836,6 @@ def display_background_image(window):
     update_price_image(canvas)
     canvas.after(10, consume_from_queue)
     canvas.after(10, init_scrolling_text)
-
 
     window.mainloop()
 
