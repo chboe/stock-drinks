@@ -105,16 +105,15 @@ def display_settings_window():
         # Convert the update frequency to an integer
         settings_dict["scrolling_text_interval"] = int(scrolling_text_interval_var.get())
 
+        # Convert the update frequency to an integer
+        settings_dict["graph_update_delay"] = int(graph_update_delay_var.get())
+
         if set_timer:
             update_price_image(canvas)
 
         # Save settings to settings.json file
-        if os.path.exists(os.path.join(save_path, 'settings.json')):
-            with open(os.path.join(save_path, 'settings.json'), 'r') as f:
-                settings_dict = json.load(f)
-        else:
-            with open(os.path.join(save_path, 'settings.json'), 'w') as f:
-                json.dump(settings_dict, f)
+        with open(os.path.join(save_path, 'settings.json'), 'w') as f:
+            json.dump(settings_dict, f)
 
         # Close the settings window after saving
         settings_window.destroy()
@@ -150,9 +149,16 @@ def display_settings_window():
                                              font=('Arial', 14))
     scrolling_text_interval_entry.grid(row=2, column=1, padx=10, pady=5, sticky="e")
 
+    graph_update_delay_label = tk.Label(settings_window, text="Graf opdateringstid:", font=('Arial', 14, 'bold'))
+    graph_update_delay_label.grid(row=3, column=0, padx=10, pady=5, sticky="w")
+    graph_update_delay_var = tk.IntVar(value=settings_dict["graph_update_delay"])
+    graph_update_delay_entry = tk.Entry(settings_window, textvariable=graph_update_delay_var,
+                                             font=('Arial', 14))
+    graph_update_delay_entry.grid(row=3, column=1, padx=10, pady=5, sticky="e")
+
     # Save button
     save_button = tk.Button(settings_window, text="Gem", font=('Arial', 14, 'bold'), command=save_settings)
-    save_button.grid(row=3, column=0, columnspan=2, padx=10, pady=10)
+    save_button.grid(row=4, column=0, columnspan=2, padx=10, pady=10)
 
     # Configure column widths to be the same
     settings_window.grid_columnconfigure(0, weight=1)
