@@ -633,7 +633,7 @@ def adjust_prices():
             new_price = latest_price - price_decay * start_price
 
         # Check if price exceeds reset percentage above maximum or below minimum
-        if new_price < minimum_price - (1 - reset_pct) * start_price or maximum_price + (1 + reset_pct) * start_price < new_price:
+        if new_price < minimum_price - reset_pct * start_price or maximum_price + reset_pct * start_price < new_price:
             new_price = start_price + random.uniform(-reset_interval, reset_interval) * start_price
 
         new_price = max(minimum_price, min(new_price, maximum_price))
