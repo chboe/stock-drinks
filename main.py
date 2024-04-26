@@ -625,15 +625,15 @@ def adjust_prices():
 
         # Increase price for most sold item and its group
         if len(purchases) > 0 and drink_id == most_sold_item_id:
-            new_price = latest_price + (1 + main_change) * start_price
+            new_price = latest_price + main_change * start_price
         elif len(purchases) > 0 and drinks_df.loc[drinks_df['ID'] == drink_id, 'Group'].iloc[0] == most_sold_group:
-            new_price = latest_price + (1 + group_change) * start_price
+            new_price = latest_price + group_change * start_price
         else:
             # Decrease price based on price decay
-            new_price = latest_price + (1 - price_decay) * start_price
+            new_price = latest_price - price_decay * start_price
 
         # Check if price exceeds reset percentage above maximum or below minimum
-        if minimum_price - (1 - reset_pct) * start_price < new_price < maximum_price + (1 + reset_pct) * start_price:
+        if new_price < minimum_price - (1 - reset_pct) * start_price or maximum_price + (1 + reset_pct) * start_price < new_price:
             new_price = start_price + random.uniform(-reset_interval, reset_interval) * start_price
 
         new_price = max(minimum_price, min(new_price, maximum_price))
