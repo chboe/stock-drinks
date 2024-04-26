@@ -696,7 +696,7 @@ def get_price_image():
     global current_price_adjustment_count
     if timer_id is not None:
         canvas.after_cancel(timer_id)
-    timer_id = canvas.after(settings_dict["graph_update_delay"] * 1000, lambda i=current_price_adjustment_count: consume_from_queue(i))
+    timer_id = canvas.after(100, lambda i=current_price_adjustment_count: consume_from_queue(i, 0))
 
     # Clear existing content on canvas
     canvas.delete("graph")
@@ -791,13 +791,16 @@ def get_price_image():
 
 
 
-def consume_from_queue(price_adjustment_count):
+def consume_from_queue(price_adjustment_count, processed_images_amount):
     global graph_queue_out
     global canvas
     try:
         q_res = graph_queue_out.get_nowait()
     except:
         q_res = None
+
+    processed_images = processed_images_amount
+
     if q_res is not None:
         queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, resized_graph_image = q_res
         if queued_price_adjustment_count == price_adjustment_count:
@@ -805,10 +808,14 @@ def consume_from_queue(price_adjustment_count):
             graph_photo = ImageTk.PhotoImage(resized_graph_image)
             graph_images[drink_id] = graph_photo
             canvas.create_image(graph_x, graph_y, image=graph_photo, anchor='nw')
+            processed_images += 1
         elif queued_price_adjustment_count < price_adjustment_count:
             graph_queue_out.put((queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, resized_graph_image))
 
-        consume_from_queue(price_adjustment_count)
+    if processed_images_amount < len(drinks_df. index):
+        canvas.after(100, lambda i=current_price_adjustment_count: consume_from_queue(price_adjustment_count, processed_images))
+
+
 
 
 def update_price_image(queue_timer):
@@ -851,7 +858,6 @@ def display_background_image(window):
 
     # Schedule the update of the background image
     update_price_image(True) #Start timer at beginning of program
-    canvas.after(10, lambda i=current_price_adjustment_count: consume_from_queue(i))
     canvas.after(10, init_scrolling_text)
 
     window.mainloop()
