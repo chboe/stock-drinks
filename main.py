@@ -593,6 +593,7 @@ def create_text_with_outline(canvas, x, y, text, font=("Helvetica", 12), fill="w
 
 def adjust_prices():
     global current_price_adjustment_count
+    global purchases
     current_price_adjustment_count += 1
     updated_prices = {}
 
@@ -650,6 +651,7 @@ def adjust_prices():
 
         updated_prices[drink_id] = new_price
 
+    purchases = {row['ID']: 0 for _, row in drinks_df.iterrows()}
     return updated_prices
 
 
