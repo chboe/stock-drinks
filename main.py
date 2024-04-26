@@ -77,6 +77,7 @@ price_vars = {}
 price_vars_str = {}
 canvas = None
 root = None
+timer_id = None
 graph_queue_out = multiprocessing.Queue()
 graph_queue_in = multiprocessing.Queue()
 graph_images = {}
@@ -109,7 +110,7 @@ def display_settings_window():
         settings_dict["graph_update_delay"] = int(graph_update_delay_var.get())
 
         if set_timer:
-            update_price_image(canvas)
+            update_price_image(True)
 
         # Save settings to settings.json file
         with open(os.path.join(save_path, 'settings.json'), 'w') as f:
@@ -605,6 +606,7 @@ def adjust_prices():
 
         # Get drink information
         # Ensure new price stays within range
+        name = drinks_df.loc[drinks_df['ID'] == drink_id, 'Name'].iloc[0]
         minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Min. Price'].iloc[0]
         maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Max. Price'].iloc[0]
         start_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Starting Price'].iloc[0]
@@ -623,15 +625,15 @@ def adjust_prices():
 
         # Increase price for most sold item and its group
         if len(purchases) > 0 and drink_id == most_sold_item_id:
-            new_price = latest_price * (1 + main_change * start_price)
+            new_price = latest_price + (1 + main_change) * start_price
         elif len(purchases) > 0 and drinks_df.loc[drinks_df['ID'] == drink_id, 'Group'].iloc[0] == most_sold_group:
-            new_price = latest_price * (1 + group_change * start_price)
+            new_price = latest_price + (1 + group_change) * start_price
         else:
             # Decrease price based on price decay
-            new_price = latest_price * (1 - price_decay)
+            new_price = latest_price + (1 - price_decay) * start_price
 
         # Check if price exceeds reset percentage above maximum or below minimum
-        if new_price > maximum_price * (1 + reset_pct) or new_price < minimum_price * (1 - reset_pct):
+        if minimum_price - (1 - reset_pct) * start_price < new_price < maximum_price + (1 + reset_pct) * start_price:
             new_price = start_price + random.uniform(-reset_interval, reset_interval) * start_price
 
         new_price = max(minimum_price, min(new_price, maximum_price))
@@ -689,6 +691,12 @@ def get_price_image():
     width = 1920
     height = 1080
     prices = adjust_prices()
+
+    global timer_id
+    global current_price_adjustment_count
+    if timer_id is not None:
+        canvas.after_cancel(timer_id)
+    timer_id = canvas.after(settings_dict["graph_update_delay"] * 1000, lambda i=current_price_adjustment_count: consume_from_queue(i))
 
     # Clear existing content on canvas
     canvas.delete("graph")
@@ -781,10 +789,9 @@ def get_price_image():
         graph_queue_in.put((current_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height,
                             minimum_price, maximum_price, drink_prices))
 
-        canvas.after(settings_dict["graph_update_delay"] * 1000, consume_from_queue)
 
 
-def consume_from_queue():
+def consume_from_queue(price_adjustment_count):
     global graph_queue_out
     global canvas
     try:
@@ -793,12 +800,15 @@ def consume_from_queue():
         q_res = None
     if q_res is not None:
         queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, resized_graph_image = q_res
-        if queued_price_adjustment_count == current_price_adjustment_count:
+        if queued_price_adjustment_count == price_adjustment_count:
             # Convert the resized image to a Tkinter PhotoImage object
             graph_photo = ImageTk.PhotoImage(resized_graph_image)
             graph_images[drink_id] = graph_photo
             canvas.create_image(graph_x, graph_y, image=graph_photo, anchor='nw')
-        consume_from_queue()
+        elif queued_price_adjustment_count < price_adjustment_count:
+            graph_queue_out.put((queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, resized_graph_image))
+
+        consume_from_queue(price_adjustment_count)
 
 
 def update_price_image(queue_timer):
@@ -830,6 +840,7 @@ def init_scrolling_text():
 
 def display_background_image(window):
     global canvas
+    global current_price_adjustment_count
     # Set window title and geometry
     window.title("Prisoversigt")
     window.geometry("1920x1080")
@@ -839,8 +850,8 @@ def display_background_image(window):
     canvas.pack()
 
     # Schedule the update of the background image
-    update_price_image(canvas)
-    canvas.after(10, consume_from_queue)
+    update_price_image(True) #Start timer at beginning of program
+    canvas.after(10, lambda i=current_price_adjustment_count: consume_from_queue(i))
     canvas.after(10, init_scrolling_text)
 
     window.mainloop()
