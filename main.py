@@ -698,14 +698,17 @@ def get_price_image():
     global current_price_adjustment_count
     if timer_id is not None:
         canvas.after_cancel(timer_id)
+
     timer_id = canvas.after(100, lambda i=current_price_adjustment_count: consume_from_queue(i, 0))
 
     # Clear existing content on canvas
-    canvas.delete("graph")
+    canvas.delete("all")
 
     # Load and display the background image
     bg_image = Image.open(resource_path("bg.jpg"))
     bg_photo = ImageTk.PhotoImage(bg_image)
+    bg_image.close()
+
     canvas.create_image(0, 0, image=bg_photo, anchor='nw')
     create_text_with_outline(canvas, width // 2, height // 15, anchor="center",
                              text="Børsbrandert", font=("Josefin Sans", 50), fill='white')
@@ -814,7 +817,7 @@ def consume_from_queue(price_adjustment_count, processed_images_amount):
         elif queued_price_adjustment_count < price_adjustment_count:
             graph_queue_out.put((queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, resized_graph_image))
 
-    if processed_images_amount < len(drinks_df. index):
+    if processed_images_amount < len(drinks_df.index):
         canvas.after(100, lambda i=current_price_adjustment_count: consume_from_queue(price_adjustment_count, processed_images))
 
 
