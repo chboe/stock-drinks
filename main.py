@@ -60,9 +60,9 @@ settings_dict = {
 }
 
 # Load CSV data into a pandas DataFrame
-drinks_schema = {"ID": str, "Name": str, "Min. Price": float, "Max. Price": float, "Starting Price": float,
+drinks_schema = {"ID": str, "Name": str, "Min. L. Price": float, "Min. U. Price": float, "Max. L. Price": float, "Max. U. Price": float, "Starting Price": float,
                  "Short Name": str, "Group": int, "Price Decay": float, "Main Change": float, "Group Change": float,
-                 "Reset Interval": float, "Reset pct.": float}
+                 "Reset Interval": float}
 drinks_df = pd.DataFrame(columns=drinks_schema.keys()).astype(drinks_schema)
 
 phrases_schema = {"Phrase": str}
@@ -75,6 +75,8 @@ drink_prices = {row['ID']: [row['Starting Price']] * 20 for _, row in drinks_df.
 purchases = {row['ID']: 0 for _, row in drinks_df.iterrows()}
 price_vars = {}
 price_vars_str = {}
+current_min_reset = {row['ID']: random.uniform(row["Min. L. Price"], row["Min. U. Price"]) for _, row in drinks_df.iterrows()}
+current_max_reset = {row['ID']: random.uniform(row["Max. L. Price"], row["Max. U. Price"]) for _, row in drinks_df.iterrows()}
 canvas = None
 root = None
 timer_id = None
@@ -279,8 +281,7 @@ def display_drink_table():
     global drinks_df
     global drinks_schema
 
-    column_widths = [15, 10, 10, 15, 10, 5, 15, 15, 15, 15,
-                     15]  # Define widths for each column (excluding the first column)
+    column_widths = [15, 12, 12, 12, 12, 12, 12, 5, 12, 12, 12, 12, 12]  # Define widths for each column (excluding the first column)
 
     def add_drink_row():
         # Add a new row for a phrase
@@ -506,8 +507,9 @@ def display_data(window):
     for index, row in drinks_df.iterrows():
         id = row['ID']
         name = row['Name']
-        minimum_price = int(row['Min. Price'])  # Convert to integer
-        maximum_price = int(row['Max. Price'])  # Convert to integer
+        minimum_price = int(row['Min. L. Price'])  # Convert to integer
+        maximum_price = int(row['Max. U. Price'])  # Convert to integer
+
         # Fetch current price from the dictionary
         current_price_var_str = price_vars_str[id]
         current_price_var = price_vars[id]
@@ -594,6 +596,8 @@ def create_text_with_outline(canvas, x, y, text, font=("Helvetica", 12), fill="w
 def adjust_prices():
     global current_price_adjustment_count
     global purchases
+    global current_min_reset
+    global current_max_reset
     current_price_adjustment_count += 1
     updated_prices = {}
 
@@ -608,11 +612,10 @@ def adjust_prices():
         # Get drink information
         # Ensure new price stays within range
         name = drinks_df.loc[drinks_df['ID'] == drink_id, 'Name'].iloc[0]
-        minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Min. Price'].iloc[0]
-        maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Max. Price'].iloc[0]
+        minimum_price = current_min_reset[drink_id]
+        maximum_price = current_max_reset[drink_id]
         start_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Starting Price'].iloc[0]
         reset_interval = drinks_df.loc[drinks_df['ID'] == drink_id, 'Reset Interval'].iloc[0]
-        reset_pct = drinks_df.loc[drinks_df['ID'] == drink_id, 'Reset pct.'].iloc[0]
 
         # Define random ranges for changes
         main_change_range = drinks_df.loc[drinks_df['ID'] == drink_id, 'Main Change'].iloc[0]
@@ -634,7 +637,15 @@ def adjust_prices():
             new_price = latest_price - price_decay * start_price
 
         # Check if price exceeds reset percentage above maximum or below minimum
-        if new_price < minimum_price - reset_pct * start_price or maximum_price + reset_pct * start_price < new_price:
+        if new_price < current_min_reset[drink_id] or current_max_reset[drink_id] < new_price:
+            min_l_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Min. L. Price'].iloc[0]
+            min_u_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Min. U. Price'].iloc[0]
+            max_l_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Max. L. Price'].iloc[0]
+            max_u_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Max. U. Price'].iloc[0]
+
+            current_min_reset[drink_id] = random.uniform(min_l_price, min_u_price)
+            current_max_reset[drink_id] = random.uniform(max_l_price, max_u_price)
+
             new_price = start_price + random.uniform(-reset_interval, reset_interval) * start_price
 
         new_price = max(minimum_price, min(new_price, maximum_price))
@@ -781,8 +792,8 @@ def get_price_image():
         graph_x = column_base + 240
         graph_y = row_position - 25
 
-        maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Max. Price'].iloc[0]
-        minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Min. Price'].iloc[0]
+        maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Max. U. Price'].iloc[0]
+        minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Min. L. Price'].iloc[0]
 
         # Overlay the grey box underneath the graph image
         canvas.create_rectangle(graph_x - 2, graph_y - 2, graph_x + graph_width + 4, graph_y + graph_height + 4,
