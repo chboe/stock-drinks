@@ -616,8 +616,12 @@ def display_data(window):
     phrases_button.grid(row=1, column=2, padx=10, pady=10, sticky="ew")
 
     # Add button to reset counts
-    reset_button = tk.Button(footer_frame, text="Gem", font=('Arial', 16), command=save_and_update_image, width=10)
-    reset_button.grid(row=0, column=2, padx=10, pady=10, sticky="ew")
+    sell_button = tk.Button(footer_frame, text="Sælg", font=('Arial', 16), command=save_and_update_image, width=10)
+    sell_button.grid(row=0, column=2, padx=10, pady=10, sticky="ew")
+
+    # Add button to reset counts
+    reset_button = tk.Button(footer_frame, text="Reset", font=('Arial', 16), command=reset_counts, width=10)
+    reset_button.grid(row=0, column=3, padx=10, pady=10, sticky="ew")
 
     # Place the footer frame at the bottom of the window
     footer_frame.place(relx=0.5, rely=0.9, anchor=tk.CENTER)
