@@ -720,7 +720,7 @@ def get_graph_image_process(queue_in, queue_out):
         except:
             q_res = None
         if q_res is not None:
-            queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, minimum_price, maximum_price, drink_prices = q_res
+            queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, minimum_price, maximum_price, drink_prices, start_price = q_res
             # Create a fig
             fig, ax = plt.subplots(figsize=(graph_width // 5, graph_height // 5))
 
@@ -728,6 +728,7 @@ def get_graph_image_process(queue_in, queue_out):
             last_5_prices = drink_prices[drink_id][-5:]
             xs = range(len(last_5_prices))
             ys = last_5_prices
+            ax.plot(xs, [start_price]*len(last_5_prices), marker='', linewidth=35, linestyle='dashed', dashes=(3, 2), color='black')
             ax.plot(xs, ys, marker='', linewidth=130, color='black')
             ax.plot(xs, ys, marker='', linewidth=70, color='white')
             ax.set_ylim(minimum_price - 3, maximum_price + 3)
@@ -839,6 +840,7 @@ def get_price_image():
         graph_x = column_base + 240
         graph_y = row_position - 25
 
+        start_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Starting Price'].iloc[0]
         maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Max. U. Price'].iloc[0]
         minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Min. L. Price'].iloc[0]
 
@@ -850,7 +852,7 @@ def get_price_image():
         canvas.create_rectangle(0, 980, 1920, 1080, fill='gray50', outline='black', width=2, stipple='gray25')
 
         graph_queue_in.put((current_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height,
-                            minimum_price, maximum_price, drink_prices))
+                            minimum_price, maximum_price, drink_prices, start_price))
 
 
 def consume_from_queue(price_adjustment_count, processed_images_amount):
