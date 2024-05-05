@@ -60,7 +60,8 @@ settings_dict = {
 }
 
 # Load CSV data into a pandas DataFrame
-drinks_schema = {"ID": str, "Name": str, "Min. L. Price": float, "Min. U. Price": float, "Max. L. Price": float, "Max. U. Price": float, "Starting Price": float,
+drinks_schema = {"ID": str, "Name": str, "Min. L. Price": float, "Min. U. Price": float, "Max. L. Price": float,
+                 "Max. U. Price": float, "Starting Price": float,
                  "Short Name": str, "Group": int, "Price Decay": float, "Main Change": float, "Group Change": float,
                  "Reset Interval": float}
 drinks_df = pd.DataFrame(columns=drinks_schema.keys()).astype(drinks_schema)
@@ -75,8 +76,10 @@ drink_prices = {row['ID']: [row['Starting Price']] * 20 for _, row in drinks_df.
 purchases = {row['ID']: 0 for _, row in drinks_df.iterrows()}
 price_vars = {}
 price_vars_str = {}
-current_min_reset = {row['ID']: random.uniform(row["Min. L. Price"], row["Min. U. Price"]) for _, row in drinks_df.iterrows()}
-current_max_reset = {row['ID']: random.uniform(row["Max. L. Price"], row["Max. U. Price"]) for _, row in drinks_df.iterrows()}
+current_min_reset = {row['ID']: random.uniform(row["Min. L. Price"], row["Min. U. Price"]) for _, row in
+                     drinks_df.iterrows()}
+current_max_reset = {row['ID']: random.uniform(row["Max. L. Price"], row["Max. U. Price"]) for _, row in
+                     drinks_df.iterrows()}
 canvas = None
 root = None
 timer_id = None
@@ -156,7 +159,7 @@ def display_settings_window():
     graph_update_delay_label.grid(row=3, column=0, padx=10, pady=5, sticky="w")
     graph_update_delay_var = tk.IntVar(value=settings_dict["graph_update_delay"])
     graph_update_delay_entry = tk.Entry(settings_window, textvariable=graph_update_delay_var,
-                                             font=('Arial', 14))
+                                        font=('Arial', 14))
     graph_update_delay_entry.grid(row=3, column=1, padx=10, pady=5, sticky="e")
 
     # Save button
@@ -281,7 +284,8 @@ def display_drink_table():
     global drinks_df
     global drinks_schema
 
-    column_widths = [15, 12, 12, 12, 12, 12, 12, 5, 12, 12, 12, 12, 12]  # Define widths for each column (excluding the first column)
+    column_widths = [15, 12, 12, 12, 12, 12, 12, 5, 12, 12, 12, 12,
+                     12]  # Define widths for each column (excluding the first column)
 
     def add_drink_row():
         # Add a new row for a phrase
@@ -461,91 +465,130 @@ def display_data(window):
     # Set window size to 1920x1080
     window.geometry("1920x1080")
 
-    # Header title
-    header_label = tk.Label(window, text="Produktoversigt", font=('Arial', 24, 'bold'))
-    header_label.pack(padx=10, pady=10)
+    # Table frame
+    table_frame = tk.Frame(window)
+    table_frame.pack(fill="both", expand=True)
 
-    # Create parent frame to hold left, middle, and right frames
-    parent_frame = tk.Frame(window)
-    parent_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-    # Create left, middle, and right frames
-    left_frame = tk.Frame(parent_frame)
-    left_frame.pack(side="left", fill="both", expand=True)
-    middle_frame = tk.Frame(parent_frame)
-    middle_frame.pack(side="left", fill="both", expand=True)
-    right_frame = tk.Frame(parent_frame)
-    right_frame.pack(side="left", fill="both", expand=True)
 
     # Set fixed width for the name column
-    name_column_width = 200
+    col_widths = [170, 80, 80, 130, 40, 40, 40]
 
-    # Create labels for each column
-    labels = ['Navn', 'Min.', 'Max.', 'Nu']
-    for i, label in enumerate(labels):
-        # Align text to the left for 'Navn' and to the right for other labels
-        anchor = "w" if label == 'Navn' else "e"
-        label_text = label if len(label) <= 10 else label[:7] + "..."
-        label_widget_left = tk.Label(left_frame, text=label_text, font=('Arial', 22, 'bold'), anchor=anchor)
-        label_widget_left.grid(row=0, column=i, padx=10, pady=10, sticky="nsew")
+    #Table frames padding
+    table_frame_padding = 20
 
-        label_widget_middle = tk.Label(middle_frame, text=label_text, font=('Arial', 22, 'bold'), anchor=anchor)
-        label_widget_middle.grid(row=0, column=i, padx=10, pady=10, sticky="nsew")
+    # Create left, middle, and right frames
+    header_frame = tk.Frame(table_frame)
+    header_frame.pack()
 
-        label_widget_right = tk.Label(right_frame, text=label_text, font=('Arial', 22, 'bold'), anchor=anchor)
-        label_widget_right.grid(row=0, column=i, padx=10, pady=10, sticky="nsew")
+    header_left_frame = tk.Frame(header_frame)
+    header_left_frame.grid_configure(row=0, column=0, padx=table_frame_padding)
 
-        # Set fixed width for the name column
-        if label == 'Navn':
-            left_frame.grid_columnconfigure(i, minsize=name_column_width)
-            middle_frame.grid_columnconfigure(i, minsize=name_column_width)
-            right_frame.grid_columnconfigure(i, minsize=name_column_width)
+    header_middle_frame = tk.Frame(header_frame)
+    header_middle_frame.grid_configure(row=0, column=1, padx=table_frame_padding)
+
+    header_right_frame = tk.Frame(header_frame)
+    header_right_frame.grid_configure(row=0, column=2, padx=table_frame_padding)
+
+
+    for frame in [header_left_frame, header_middle_frame, header_right_frame]:
+        # Create labels for each column
+        labels = ['Navn', 'Min.', 'Max.', 'Nu', '', '', '' '']
+        frame.grid_rowconfigure(0, minsize=100)
+        for i, label in enumerate(labels):
+            # Align text to the left for 'Navn' and to the right for other labels
+            anchor = "w" if label == 'Navn' else "e"
+            label_widget = tk.Label(frame, text=label, font=('Arial', 22, 'bold'), anchor=anchor)
+            label_widget.grid(row=0, column=i, sticky="nsew")
+            frame.grid_columnconfigure(i, minsize=col_widths[i])
 
     # Display data in three columns
     count_vars = {}
     total = 0  # Variable to store the total cost
-    for index, row in drinks_df.iterrows():
-        id = row['ID']
-        name = row['Name']
-        minimum_price = int(row['Min. L. Price'])  # Convert to integer
-        maximum_price = int(row['Max. U. Price'])  # Convert to integer
+    entries_frame = tk.Frame(table_frame)
+    entries_frame.pack()
 
-        # Fetch current price from the dictionary
-        current_price_var_str = price_vars_str[id]
-        current_price_var = price_vars[id]
+    entries_y_min_size = 50
 
-        # Display the values alternately in left, middle, and right frames
-        values = [name, minimum_price, maximum_price, current_price_var_str]
-        frame_to_use = left_frame if index % 3 == 0 else middle_frame if index % 3 == 1 else right_frame
-        for i, value in enumerate(values):
-            # Align text to the left for 'Navn' and to the right for other values
-            anchor = "w" if i == 0 else "e"
-            if i != 3:
-                value_label = tk.Label(frame_to_use, text=f"{value}", font=('Arial', 18), anchor=anchor)
-            else:
-                value_label = tk.Label(frame_to_use, textvariable=value, font=('Arial', 18), anchor=anchor)
-            value_label.grid(row=index // 3 + 1, column=i, padx=10, pady=5, sticky="nsew")
-            frame_to_use.grid_columnconfigure(i, weight=1)  # Make columns expandable
+    # Group drinks by 'Group' column
+    for group in drinks_df['Group'].unique():
+        group_frame = tk.Frame(entries_frame)
+        group_frame.pack()
 
-        # Add buttons for adding and subtracting counts
-        count_var = tk.IntVar(value=0)  # Create IntVar for count
-        count_vars[id] = count_var  # Add count variable to the dictionary
-        add_button = tk.Button(frame_to_use, text="+", font=('Arial', 14), command=lambda x=id: add_count(x))
-        add_button.grid(row=index // 3 + 1, column=5, padx=5, pady=5, sticky="nsew")
+        left_frame = tk.Frame(group_frame)
+        left_frame.grid_configure(row=0, column=0, padx=table_frame_padding)
+        middle_frame = tk.Frame(group_frame)
+        middle_frame.grid_configure(row=0, column=1, padx=table_frame_padding)
+        right_frame = tk.Frame(group_frame)
+        right_frame.grid_configure(row=0, column=2, padx=table_frame_padding)
 
-        subtract_button = tk.Button(frame_to_use, text="-", font=('Arial', 14),
-                                    command=lambda x=id: subtract_count(x))
-        subtract_button.grid(row=index // 3 + 1, column=6, padx=5, pady=5, sticky="nsew")
+        grouped_drinks = drinks_df.loc[drinks_df['Group'] == group]
+        sorted_grouped_drinks = grouped_drinks.sort_values(by='Name')
+        sorted_grouped_drinks = sorted_grouped_drinks.reset_index(drop=True)
 
-        # Add count column starting at 0
-        count_label = tk.Label(frame_to_use, textvariable=count_var, font=('Arial', 18), anchor="e", width=2)
-        count_label.grid(row=index // 3 + 1, column=7, padx=5, pady=5, sticky="nsew")
+        for index, row in sorted_grouped_drinks.iterrows():
+            id = row['ID']
+            name = row['Name']
+            minimum_price = int(row['Min. L. Price'])  # Convert to integer
+            maximum_price = int(row['Max. U. Price'])  # Convert to integer
 
-        # Calculate total cost and update the total variable
-        total += count_var.get() * current_price_var.get()
+            # Fetch current price from the dictionary
+            current_price_var_str = price_vars_str[id]
+            current_price_var = price_vars[id]
 
-        # Adjust row height
-        frame_to_use.grid_rowconfigure(index // 3 + 1, minsize=30)  # Set minimum row height to 30 pixels
+            # Display the values alternately in left, middle, and right frames
+            values = [name, minimum_price, maximum_price, current_price_var_str]
+            frame_to_use = left_frame if index % 3 == 0 else middle_frame if index % 3 == 1 else right_frame
+            for i, value in enumerate(values):
+                # Align text to the left for 'Navn' and to the right for other values
+                anchor = "w" if i == 0 else "e"
+                if i != 3:
+                    value_label = tk.Label(frame_to_use, text=f"{value}", font=('Arial', 18), anchor=anchor)
+                else:
+                    value_label = tk.Label(frame_to_use, textvariable=value, font=('Arial', 18), anchor=anchor)
+                value_label.grid(row=index // 3 + 1, column=i, sticky="nsew")
+                frame_to_use.grid_columnconfigure(i, minsize=col_widths[i])
+
+            # Add buttons for adding and subtracting counts
+            count_var = tk.IntVar(value=0)  # Create IntVar for count
+            count_vars[id] = count_var  # Add count variable to the dictionary
+            add_button = tk.Button(frame_to_use, text="+", font=('Arial', 14), command=lambda x=id: add_count(x))
+            add_button.grid(row=index // 3 + 1, column=4, padx=5, pady=5, sticky="nsew")
+            frame_to_use.grid_columnconfigure(4, minsize=col_widths[4])
+
+            subtract_button = tk.Button(frame_to_use, text="-", font=('Arial', 14),
+                                        command=lambda x=id: subtract_count(x))
+            subtract_button.grid(row=index // 3 + 1, column=5, padx=5, pady=5, sticky="nsew")
+            frame_to_use.grid_columnconfigure(5, minsize=col_widths[5])
+
+            # Add count column starting at 0
+            count_label = tk.Label(frame_to_use, textvariable=count_var, font=('Arial', 18), anchor="e", width=2)
+            count_label.grid(row=index // 3 + 1, column=6, padx=5, pady=5, sticky="nsew")
+            frame_to_use.grid_columnconfigure(6, minsize=col_widths[6])
+
+            # Calculate total cost and update the total variable
+            total += count_var.get() * current_price_var.get()
+
+            # Adjust row height
+            frame_to_use.grid_rowconfigure(index // 3 + 1, minsize=entries_y_min_size)
+
+        filler_entries = 0 if 3- len(sorted_grouped_drinks.index) % 3 == 3 else 3 - len(sorted_grouped_drinks.index) % 3
+        filler_frames = [right_frame, middle_frame]
+        for i in range(filler_entries):
+            frame_to_use = filler_frames[i]
+            row = len(sorted_grouped_drinks.index) // 3 + 1
+            for k in range(7):
+                label = tk.Label(frame_to_use, text=f"", font=('Arial', 18), anchor="w")
+                label.grid(row=row, column=k)
+                frame_to_use.grid_columnconfigure(k, minsize=col_widths[k])
+
+            frame_to_use.grid_rowconfigure(row, minsize=entries_y_min_size)
+
+        for frame in [left_frame, middle_frame, right_frame]:
+            row = len(sorted_grouped_drinks.index) // 3 + 2
+            frame.grid_rowconfigure(row, minsize=15)
+            for k in range(7):
+                label = tk.Label(frame, text=f"")
+                label.grid(row=row, column=k)
 
     footer_frame = tk.Frame(window)
 
@@ -806,7 +849,6 @@ def get_price_image():
                             minimum_price, maximum_price, drink_prices))
 
 
-
 def consume_from_queue(price_adjustment_count, processed_images_amount):
     global graph_queue_out
     global canvas
@@ -826,12 +868,12 @@ def consume_from_queue(price_adjustment_count, processed_images_amount):
             canvas.create_image(graph_x, graph_y, image=graph_photo, anchor='nw')
             processed_images += 1
         elif queued_price_adjustment_count < price_adjustment_count:
-            graph_queue_out.put((queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height, resized_graph_image))
+            graph_queue_out.put((queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height,
+                                 resized_graph_image))
 
     if processed_images_amount < len(drinks_df.index):
-        canvas.after(100, lambda i=current_price_adjustment_count: consume_from_queue(price_adjustment_count, processed_images))
-
-
+        canvas.after(100, lambda i=current_price_adjustment_count: consume_from_queue(price_adjustment_count,
+                                                                                      processed_images))
 
 
 def update_price_image(queue_timer):
@@ -873,7 +915,7 @@ def display_background_image(window):
     canvas.pack()
 
     # Schedule the update of the background image
-    update_price_image(True) #Start timer at beginning of program
+    update_price_image(True)  # Start timer at beginning of program
     canvas.after(10, init_scrolling_text)
 
     window.mainloop()
