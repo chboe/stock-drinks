@@ -1,3 +1,4 @@
+import datetime
 import sys
 import time
 import tkinter as tk
@@ -51,7 +52,14 @@ def load_settings():
         phrases_df.to_csv(path_or_buf=os.path.join(save_path, 'phrases.csv'), index=False)
 
 
+    if not os.path.isdir(report_path):
+        os.makedirs(report_path)
+
+
+
 save_path = os.path.join(userpaths.get_my_documents(), 'Spruthusets-Børsbrandert')
+report_path = os.path.join(userpaths.get_my_documents(), 'Spruthusets-Børsbrandert\Reports')
+
 settings_dict = {
     "update_frequency": 5,
     "working_mode": 1,
@@ -74,6 +82,7 @@ load_settings()
 # Sample dictionary mapping drink names to lists [minimum price, maximum price, starting price, current price]
 drink_prices = {row['ID']: [row['Starting Price']] * 20 for _, row in drinks_df.iterrows()}
 purchases = {row['ID']: 0 for _, row in drinks_df.iterrows()}
+all_time_purchases = {row['ID']: [] for _, row in drinks_df.iterrows()}
 price_vars = {}
 price_vars_str = {}
 current_min_reset = {row['ID']: random.uniform(row["Min. L. Price"], row["Min. U. Price"]) for _, row in
@@ -431,27 +440,66 @@ def display_drink_table():
 def display_data(window):
     # Function to display data in a new window
 
-    def add_count(drink_name):
+    def add_count(drink_id):
         # Function to add count when add button is clicked
-        count_vars[drink_name].set(count_vars[drink_name].get() + 1)
+        count_vars[drink_id].set(count_vars[drink_id].get() + 1)
         update_total()
 
-    def subtract_count(drink_name):
+    def subtract_count(drink_id):
         # Function to subtract count when subtract button is clicked
-        current_count = count_vars[drink_name].get()
+        current_count = count_vars[drink_id].get()
         if current_count > 0:
-            count_vars[drink_name].set(current_count - 1)
+            count_vars[drink_id].set(current_count - 1)
             update_total()
 
     def update_total():
-        total = sum(count_vars[drink_name].get() * drink_prices.get(drink_name, [])[-1] for drink_name in count_vars)
+        total = sum(count_vars[drink_id].get() * drink_prices.get(drink_id, [])[-1] for drink_id in count_vars)
         footer_total.config(text="{:.2f}".format(total))
 
     def reset_counts():
-        for drink_name in count_vars:
-            purchases[drink_name] += count_vars[drink_name].get()
-            count_vars[drink_name].set(0)
+        for drink_id in count_vars:
+            all_time_purchases[drink_id].extend([drink_prices.get(drink_id, 0)[-1]]*(count_vars[drink_id].get()))
+            purchases[drink_id] += count_vars[drink_id].get()
+            count_vars[drink_id].set(0)
         update_total()
+
+    def end_day():
+        # Calculate total sales, average sale price, total revenue, and total discount percentage
+        drink_stats = []
+        for index, drink_row in drinks_df.iterrows():
+            drink_id = drink_row["ID"]
+            drink_prices = all_time_purchases.get(drink_id, [])
+            total_sales = len(drink_prices)
+            if total_sales > 0:
+                average_sale_price = sum(drink_prices) / total_sales
+                starting_price = drink_row["Starting Price"]
+                total_revenue = sum(drink_prices)
+                total_discount_percentage = (((total_sales * starting_price) - total_revenue) / (
+                            total_sales * starting_price) * 100)*(-1)
+            else:
+                average_sale_price = 0
+                starting_price = drink_row["Starting Price"]
+                total_revenue = 0
+                total_discount_percentage = 0
+
+            drink_stats.append({
+                "Name": drink_row["Name"],
+                "Total Sales": total_sales,
+                "Average Sale Price": average_sale_price,
+                "Total Revenue": total_revenue,
+                "Starting Price": starting_price,
+                "Total Discount Percentage": total_discount_percentage
+            })
+
+        # Create a DataFrame to hold the summary statistics for each drink
+        drink_stats_df = pd.DataFrame(drink_stats)
+
+        # Format the current date and time to include hour and minute
+        file_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M") + "_drink_stats.xlsx"
+
+        # Join the report path and file name
+        full_file_path = report_path+"\\" + file_name
+        drink_stats_df.to_excel(full_file_path, index=False)
 
     def save_and_update_image():
         # Save counts and update the image if working_mode is 1 or 3
@@ -622,6 +670,10 @@ def display_data(window):
     # Add button to reset counts
     reset_button = tk.Button(footer_frame, text="Reset", font=('Arial', 16), command=reset_counts, width=10)
     reset_button.grid(row=0, column=3, padx=10, pady=10, sticky="ew")
+
+    # Add button to end day
+    end_day_button = tk.Button(footer_frame, text="Rapport", font=('Arial', 16), command=end_day, width=10)
+    end_day_button.grid(row=1, column=3, padx=10, pady=10, sticky="ew")
 
     # Place the footer frame at the bottom of the window
     footer_frame.place(relx=0.5, rely=0.9, anchor=tk.CENTER)
