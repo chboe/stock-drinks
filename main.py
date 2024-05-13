@@ -14,7 +14,6 @@ import os
 import userpaths
 import json
 
-
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
@@ -499,7 +498,8 @@ def display_data(window):
 
         # Join the report path and file name
         full_file_path = report_path+"\\" + file_name
-        drink_stats_df.to_excel(full_file_path, index=False)
+        with pd.ExcelWriter(full_file_path) as writer:
+            drink_stats_df.to_excel(writer, sheet_name="Overview")
 
     def save_and_update_image():
         # Save counts and update the image if working_mode is 1 or 3
