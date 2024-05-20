@@ -96,7 +96,181 @@ graph_queue_in = multiprocessing.Queue()
 graph_images = {}
 current_price_adjustment_count = 0
 matplotlib.use('agg')
+start_time = datetime.datetime.now()
 
+def generate_today_so_far():
+    drink_stats = []
+    for index, drink_row in drinks_df.iterrows():
+        drink_id = drink_row["ID"]
+        drink_prices = all_time_purchases.get(drink_id, [])
+        total_sales = len(drink_prices)
+        if total_sales > 0:
+            average_sale_price = sum(drink_prices) / total_sales
+            starting_price = drink_row["Starting Price"]
+            total_revenue = sum(drink_prices)
+            total_discount = total_revenue - (total_sales * starting_price)
+            total_discount_percentage = (((total_sales * starting_price) - total_revenue) / (total_sales * starting_price) * 100) * (-1)
+        else:
+            average_sale_price = 0
+            starting_price = drink_row["Starting Price"]
+            total_revenue = 0
+            total_discount_percentage = 0
+            total_discount = 0
+
+        drink_stats.append({
+            "Navn": drink_row["Name"],
+            "Total Salg": total_sales,
+            "Genms. Salgspris": round(average_sale_price, 2),
+            "Total Omsætning": round(total_revenue, 2),
+            "Startspris": starting_price,
+            "Total Rabat": round(total_discount, 2),
+            "Total Rabat %": round(total_discount_percentage, 2)
+        })
+
+    drink_prices = []
+    for val in all_time_purchases.values():
+        drink_prices.extend(val)
+    total_sales = sum([len(x) for x in all_time_purchases.values()])
+    if total_sales > 0:
+        average_sale_price = sum(drink_prices) / total_sales
+        total_revenue = sum(drink_prices)
+    else:
+        average_sale_price = 0
+        total_revenue = 0
+
+    total_discount = sum([x["Total Salg"] * x["Genms. Salgspris"] - x["Total Salg"] * x["Startspris"]  for x in drink_stats])
+    original_price = sum([x["Total Salg"] * x["Startspris"] for x in drink_stats])
+    if original_price == 0:
+        total_discount_percentage = 0
+    else:
+        total_discount_percentage = (total_discount / original_price) * 100
+
+    drink_stats.append({
+        "Navn": "Total",
+        "Total Salg": total_sales,
+        "Genms. Salgspris": round(average_sale_price, 2),
+        "Total Omsætning": round(total_revenue, 2),
+        "Startspris": 0,
+        "Total Rabat": round(total_discount, 2),
+        "Total Rabat %": round(total_discount_percentage, 2)
+    })
+
+    # Create a DataFrame to hold the summary statistics for each drink
+    drink_stats_df = pd.DataFrame(drink_stats)
+
+    # Format the current date and time to include hour and minute
+    file_name = start_time.strftime("%Y-%m-%d-%H-%M") + "_" + datetime.datetime.now().strftime("%Y-%m-%d-%H-%M") + "_drink_stats.xlsx"
+
+    # Join the report path and file name
+    full_file_path = report_path + "\\" + file_name
+    with pd.ExcelWriter(full_file_path) as writer:
+        drink_stats_df.to_excel(writer, sheet_name="Overview")
+
+
+def generate_year_so_far():
+    today = datetime.datetime.now()
+    read_schema = {"Navn": str, "Total Salg": float, "Genms. Salgspris": float, "Total Omsætning": float,
+                   "Startspris": float, "Total Rabat %": float, "Total Rabat": float}
+
+    daily_frames = {}
+    for file_name in os.listdir(report_path):
+        if "drink_stats" in file_name:
+            s_time_str, e_time_str, suffix = file_name.split('_', 2)
+            suffix = suffix.lower()  # Normalize the suffix to lower case
+
+            # Try to parse the date and time parts
+            start_dt = datetime.datetime.strptime(s_time_str, "%Y-%m-%d-%H-%M")
+            end_dt = datetime.datetime.strptime(e_time_str, "%Y-%m-%d-%H-%M")
+
+            # Check if the suffix is '_drink_stats.xlsx'
+            if suffix == 'drink_stats.xlsx' and start_dt.year == today.year:
+                file_path = os.path.join(report_path, file_name)
+
+                with open(file_path, 'rb') as f:
+                    df = pd.read_excel(f, engine='openpyxl', index_col=0, dtype=read_schema)
+                    value = daily_frames.get(start_dt)
+                    if value is None:
+                        daily_frames[start_dt] = (end_dt, df)
+                    elif value[0] < end_dt:
+                        daily_frames[start_dt] = (end_dt, df)
+
+    bingbong = {}
+    for value in daily_frames.values():
+        _, daily_frame = value
+        for _, row in daily_frame.iterrows():
+            if row["Navn"] != "Total":
+                key = (row["Navn"], row["Startspris"])
+                entry = bingbong.get(key)
+                if entry is None:
+                    bingbong[key] = (row["Total Salg"], row["Total Omsætning"])
+                else:
+                    bingbong[key] = (entry[0]+row["Total Salg"], entry[1]+row["Total Omsætning"])
+
+    yearly = []
+    for key, value in bingbong.items():
+        name = key[0]
+        total_sale = value[0]
+        if total_sale == 0:
+            average_sale_price = 0
+        else:
+            average_sale_price = value[1]/value[0]
+        total_revenue = total_sale*average_sale_price
+        starting_price = key[1]
+
+        total_discount = total_sale*starting_price - total_sale*average_sale_price
+        original_price = total_sale * starting_price
+        if total_sale == 0:
+            total_discount_percentage = 0
+        else:
+            total_discount_percentage = (total_discount / original_price) * 100 * (-1)
+
+        yearly.append(
+            {
+                "Navn": name,
+                "Total Salg": total_sale,
+                "Genms. Salgspris": round(average_sale_price, 2),
+                "Total Omsætning": round(total_revenue, 2),
+                "Startspris": starting_price,
+                "Total Rabat": round(total_discount, 2),
+                "Total Rabat %": round(total_discount_percentage, 2)
+            }
+        )
+
+    total_sale = sum([x["Total Salg"] for x in yearly])
+    if total_sale == 0:
+        average_sale_price = 0
+    else:
+        average_sale_price = sum([x["Total Omsætning"] for x in yearly]) / total_sale
+    total_revenue = sum([x["Total Omsætning"] for x in yearly])
+
+    total_discount = sum(x["Genms. Salgspris"]*x["Total Salg"] - x["Startspris"]*x["Total Salg"] for x in yearly)
+    original_price = sum([x["Total Salg"] * x["Startspris"] for x in yearly])
+    if total_sale == 0:
+        total_discount_percentage = 0
+    else:
+        total_discount_percentage = (total_discount / original_price)*100
+
+    total_entry = {
+                "Navn": "Total",
+                "Total Salg": total_sale,
+                "Genms. Salgspris": round(average_sale_price, 2),
+                "Total Omsætning": round(total_revenue, 2),
+                "Startspris": 0,
+                "Total Rabat": round(total_discount, 2),
+                "Total Rabat %": round(total_discount_percentage, 2)
+            }
+
+    yearly.append(total_entry)
+
+    yearly_df = pd.DataFrame(yearly)
+
+    # Format the current date and time to include hour and minute
+    file_name = start_time.strftime("%Y") + "_year-to-date.xlsx"
+
+    # Join the report path and file name
+    full_file_path = report_path + "\\" + file_name
+    with pd.ExcelWriter(full_file_path) as writer:
+        yearly_df.to_excel(writer, sheet_name="Overview")
 
 def display_settings_window():
     # Function to display settings window
@@ -463,43 +637,8 @@ def display_data(window):
         update_total()
 
     def end_day():
-        # Calculate total sales, average sale price, total revenue, and total discount percentage
-        drink_stats = []
-        for index, drink_row in drinks_df.iterrows():
-            drink_id = drink_row["ID"]
-            drink_prices = all_time_purchases.get(drink_id, [])
-            total_sales = len(drink_prices)
-            if total_sales > 0:
-                average_sale_price = sum(drink_prices) / total_sales
-                starting_price = drink_row["Starting Price"]
-                total_revenue = sum(drink_prices)
-                total_discount_percentage = (((total_sales * starting_price) - total_revenue) / (
-                            total_sales * starting_price) * 100)*(-1)
-            else:
-                average_sale_price = 0
-                starting_price = drink_row["Starting Price"]
-                total_revenue = 0
-                total_discount_percentage = 0
-
-            drink_stats.append({
-                "Name": drink_row["Name"],
-                "Total Sales": total_sales,
-                "Average Sale Price": average_sale_price,
-                "Total Revenue": total_revenue,
-                "Starting Price": starting_price,
-                "Total Discount Percentage": total_discount_percentage
-            })
-
-        # Create a DataFrame to hold the summary statistics for each drink
-        drink_stats_df = pd.DataFrame(drink_stats)
-
-        # Format the current date and time to include hour and minute
-        file_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M") + "_drink_stats.xlsx"
-
-        # Join the report path and file name
-        full_file_path = report_path+"\\" + file_name
-        with pd.ExcelWriter(full_file_path) as writer:
-            drink_stats_df.to_excel(writer, sheet_name="Overview")
+        generate_today_so_far()
+        generate_year_so_far()
 
     def save_and_update_image():
         # Save counts and update the image if working_mode is 1 or 3
@@ -640,40 +779,49 @@ def display_data(window):
 
     footer_frame = tk.Frame(window)
 
-    # Add footer label for "Total:"
-    total_label = tk.Label(footer_frame, text="Total:", font=('Arial', 20, 'bold'))
-    total_label.grid(row=0, column=0, padx=(10, 10), pady=10, sticky="ew")
-
-    # Add footer for total cost
-    footer_total = tk.Label(footer_frame, text=str(total), font=('Arial', 20, 'bold'))
-    footer_total.grid(row=0, column=1, padx=(0, 50), pady=10, sticky="ew")
-
     # Add a button to open the drink table window
     drink_table_button = tk.Button(footer_frame, text="Drinks", font=('Arial', 16), command=display_drink_table,
                                    width=10)
-    drink_table_button.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
+    drink_table_button.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
 
     # Create button to display settings window
     settings_button = tk.Button(footer_frame, text="Settings", font=('Arial', 16), command=display_settings_window,
                                 width=10)
-    settings_button.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
+    settings_button.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
     # Add button to open phrases
     phrases_button = tk.Button(footer_frame, text="Nyheder", font=('Arial', 16), command=display_phrases_table,
                                width=10)
-    phrases_button.grid(row=1, column=2, padx=10, pady=10, sticky="ew")
-
-    # Add button to reset counts
-    sell_button = tk.Button(footer_frame, text="Sælg", font=('Arial', 16), command=save_and_update_image, width=10)
-    sell_button.grid(row=0, column=2, padx=10, pady=10, sticky="ew")
-
-    # Add button to reset counts
-    reset_button = tk.Button(footer_frame, text="Reset", font=('Arial', 16), command=reset_counts, width=10)
-    reset_button.grid(row=0, column=3, padx=10, pady=10, sticky="ew")
+    phrases_button.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
 
     # Add button to end day
     end_day_button = tk.Button(footer_frame, text="Rapport", font=('Arial', 16), command=end_day, width=10)
-    end_day_button.grid(row=1, column=3, padx=10, pady=10, sticky="ew")
+    end_day_button.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
+
+    filler_columns = 15
+    for i in range(filler_columns):
+        total_label_1 = tk.Label(footer_frame, text="", width=10)
+        total_label_2 = tk.Label(footer_frame, text="", width=10)
+        total_label_1.grid(row=0, column=2+i)
+        total_label_2.grid(row=1, column=2+i)
+
+
+    # Add footer label for "Total:"
+    total_label = tk.Label(footer_frame, text="Total:", font=('Arial', 20, 'bold'))
+    total_label.grid(row=0, column=2+filler_columns, padx=(10, 10), pady=10, sticky="ew")
+
+    # Add footer for total cost
+    footer_total = tk.Label(footer_frame, text=str(total), font=('Arial', 20, 'bold'))
+    footer_total.grid(row=0, column=3+filler_columns, padx=(0, 50), pady=10, sticky="ew")
+
+    # Add button to reset counts
+    sell_button = tk.Button(footer_frame, text="Sælg", font=('Arial', 16), command=save_and_update_image, width=10)
+    sell_button.grid(row=1, column=2+filler_columns, padx=10, pady=10, sticky="ew")
+
+    # Add button to reset counts
+    reset_button = tk.Button(footer_frame, text="Reset", font=('Arial', 16), command=reset_counts, width=10)
+    reset_button.grid(row=1, column=3+filler_columns, padx=10, pady=10, sticky="ew")
+
 
     # Place the footer frame at the bottom of the window
     footer_frame.place(relx=0.5, rely=0.9, anchor=tk.CENTER)
@@ -850,15 +998,19 @@ def get_price_image():
         name = drinks_df.loc[drinks_df['ID'] == drink_id, 'Name'].iloc[0]
         short_name = drinks_df.loc[drinks_df['ID'] == drink_id, 'Short Name'].iloc[0]
         current_price = prices[drink_id]
+        start_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Starting Price'].iloc[0]
+        maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Max. U. Price'].iloc[0]
+        minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Min. L. Price'].iloc[0]
 
         # Get the previous price from the list of prices
         previous_price = drink_prices[drink_id][-2] if len(drink_prices[drink_id]) >= 2 else drink_prices[drink_id][-1]
 
         # Determine if the price has gone up, down, or remained unchanged
-        trend = "→" if current_price > previous_price else "←" if current_price < previous_price else ""
+        discount = int((1-(current_price/start_price))*100)
 
-        # Set the fill color based on the price trend
-        fill_color = "green" if trend == "←" else "red" if trend == "→" else "white"
+        # Set the fill color based on the discount
+        fill_color = "green" if discount < 0 else "red" if discount > 0 else "white"
+        #{'-' if int(start_price-current_price) < 0 else '+' if int(start_price-current_price) > 0 else ''}
 
         drink_price = prices[drink_id]
         # Extract the whole number part and the decimal part
@@ -873,8 +1025,8 @@ def get_price_image():
         create_text_with_outline(canvas, column_base + 225, row_position + 20,
                                  anchor="w", text=f"{short_name}", font=("Josefin Sans", 12), fill='white',
                                  angle=90)
-        create_text_with_outline(canvas, column_base + 350, row_position - 23,
-                                 anchor="e", text=trend, font=("Josefin Sans", 30), fill=fill_color, angle=90)
+        create_text_with_outline(canvas, column_base + 335, row_position - 5,
+                                 anchor="n", text=f"{abs(discount)}%", font=("Josefin Sans", 20), fill=fill_color, angle=90)
 
         create_text_with_outline(canvas, column_base + 500, row_position - 12,
                                  anchor="e", text=f"{whole_number_part}.", font=("Josefin Sans", 50), fill='white')
@@ -892,9 +1044,6 @@ def get_price_image():
         graph_x = column_base + 240
         graph_y = row_position - 25
 
-        start_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Starting Price'].iloc[0]
-        maximum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Max. U. Price'].iloc[0]
-        minimum_price = drinks_df.loc[drinks_df['ID'] == drink_id, 'Min. L. Price'].iloc[0]
 
         # Overlay the grey box underneath the graph image
         canvas.create_rectangle(graph_x - 2, graph_y - 2, graph_x + graph_width + 4, graph_y + graph_height + 4,
