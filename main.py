@@ -1009,7 +1009,7 @@ def get_price_image():
         discount = int((1-(current_price/start_price))*100)
 
         # Set the fill color based on the discount
-        fill_color = "green" if discount < 0 else "red" if discount > 0 else "white"
+        fill_color = "green" if discount > 0 else "red" if discount < 0 else "white"
         #{'-' if int(start_price-current_price) < 0 else '+' if int(start_price-current_price) > 0 else ''}
 
         drink_price = prices[drink_id]
