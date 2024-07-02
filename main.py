@@ -1074,7 +1074,7 @@ def consume_from_queue(price_adjustment_count, processed_images_amount):
             graph_images[drink_id] = graph_photo
             canvas.create_image(graph_x, graph_y, image=graph_photo, anchor='nw')
             processed_images += 1
-        elif queued_price_adjustment_count < price_adjustment_count:
+        elif queued_price_adjustment_count > price_adjustment_count:
             graph_queue_out.put((queued_price_adjustment_count, drink_id, graph_x, graph_y, graph_width, graph_height,
                                  resized_graph_image))
 
