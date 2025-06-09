@@ -26,17 +26,18 @@ def resource_path(relative_path):
 
 
 def load_settings():
+    global page
     global drinks_df
     global settings_dict
     global phrases_df
 
     if not os.path.isdir(save_path):
         os.makedirs(save_path)
-    if os.path.exists(os.path.join(save_path, 'drinks.csv')):
-        drinks_df = pd.read_csv(os.path.join(save_path, 'drinks.csv'), index_col=None,
+    if os.path.exists(os.path.join(save_path, f"drinks_{page}.csv")):
+        drinks_df = pd.read_csv(os.path.join(save_path, f"drinks_{page}.csv"), index_col=None,
                                 dtype=drinks_schema)
     else:
-        drinks_df.to_csv(path_or_buf=os.path.join(save_path, 'drinks.csv'), index=False)
+        drinks_df.to_csv(path_or_buf=os.path.join(save_path, f"drinks_{page}.csv"), index=False)
 
     if os.path.exists(os.path.join(save_path, 'settings.json')):
         with open(os.path.join(save_path, 'settings.json'), 'r') as f:
@@ -54,49 +55,6 @@ def load_settings():
     if not os.path.isdir(report_path):
         os.makedirs(report_path)
 
-
-
-save_path = os.path.join(userpaths.get_my_documents(), 'Spruthusets-Børsbrandert')
-report_path = os.path.join(userpaths.get_my_documents(), 'Spruthusets-Børsbrandert\Reports')
-
-settings_dict = {
-    "update_frequency": 5,
-    "working_mode": 1,
-    "scrolling_text_interval": 30,
-    "graph_update_delay": 1
-}
-
-# Load CSV data into a pandas DataFrame
-drinks_schema = {"ID": str, "Name": str, "Min. L. Price": float, "Min. U. Price": float, "Max. L. Price": float,
-                 "Max. U. Price": float, "Starting Price": float,
-                 "Short Name": str, "Group": int, "Price Decay": float, "Main Change": float, "Group Change": float,
-                 "Reset Interval": float}
-drinks_df = pd.DataFrame(columns=drinks_schema.keys()).astype(drinks_schema)
-
-phrases_schema = {"Phrase": str}
-phrases_df = pd.DataFrame(columns=phrases_schema.keys()).astype(phrases_schema)
-
-load_settings()
-
-# Sample dictionary mapping drink names to lists [minimum price, maximum price, starting price, current price]
-drink_prices = {row['ID']: [row['Starting Price']] * 20 for _, row in drinks_df.iterrows()}
-purchases = {row['ID']: 0 for _, row in drinks_df.iterrows()}
-all_time_purchases = {row['ID']: [] for _, row in drinks_df.iterrows()}
-price_vars = {}
-price_vars_str = {}
-current_min_reset = {row['ID']: random.uniform(row["Min. L. Price"], row["Min. U. Price"]) for _, row in
-                     drinks_df.iterrows()}
-current_max_reset = {row['ID']: random.uniform(row["Max. L. Price"], row["Max. U. Price"]) for _, row in
-                     drinks_df.iterrows()}
-canvas = None
-root = None
-timer_id = None
-graph_queue_out = multiprocessing.Queue()
-graph_queue_in = multiprocessing.Queue()
-graph_images = {}
-current_price_adjustment_count = 0
-matplotlib.use('agg')
-start_time = datetime.datetime.now()
 
 def generate_today_so_far():
     drink_stats = []
@@ -496,6 +454,7 @@ def display_drink_table():
         delete_buttons[index].grid_forget()
 
     def save_drinks():
+        global page
         def show_validation_error(column_name, drink_name):
             top = tk.Toplevel(table_window)
             top.geometry("600x50")
@@ -536,12 +495,12 @@ def display_drink_table():
         new_drinks_df = pd.DataFrame(new_entries)
 
         # Save the new DataFrame to CSV
-        new_drinks_df.to_csv(path_or_buf=os.path.join(save_path, 'drinks.csv'), index=False)
+        new_drinks_df.to_csv(path_or_buf=os.path.join(save_path, f"drinks_{page}.csv"), index=False)
 
         # Update drinks_df with the new DataFrame
         drinks_df = new_drinks_df
 
-        # Destroy the table window
+        # Close program
         root.destroy()
 
     # Create a new window
@@ -610,7 +569,7 @@ def display_drink_table():
     save_button.pack(pady=10)
 
 
-def display_data(window):
+def display_calculator(window):
     # Function to display data in a new window
 
     def add_count(drink_id):
@@ -1127,36 +1086,101 @@ def display_background_image(window):
 
     window.mainloop()
 
+# Initial setup
+save_path = os.path.join(userpaths.get_my_documents(), 'Spruthusets-Børsbrandert')
+report_path = os.path.join(userpaths.get_my_documents(), 'Spruthusets-Børsbrandert','Reports')
 
+settings_dict = {
+    "update_frequency": 5,
+    "working_mode": 1,
+    "scrolling_text_interval": 30,
+    "graph_update_delay": 1
+}
+
+# Empty DataFrames with schemas
+drinks_schema = {
+    "ID": str, "Name": str, "Min. L. Price": float, "Min. U. Price": float,
+    "Max. L. Price": float, "Max. U. Price": float, "Starting Price": float,
+    "Short Name": str, "Group": int, "Price Decay": float, "Main Change": float,
+    "Group Change": float, "Reset Interval": float
+}
+drinks_df = pd.DataFrame(columns=drinks_schema.keys()).astype(drinks_schema)
+
+phrases_schema = {"Phrase": str}
+phrases_df = pd.DataFrame(columns=phrases_schema.keys()).astype(phrases_schema)
+
+# GUI globals
+canvas = None
+root = None
+timer_id = None
+graph_queue_out = multiprocessing.Queue()
+graph_queue_in = multiprocessing.Queue()
+graph_images = {}
+current_price_adjustment_count = 0
+page = None
+matplotlib.use('agg')
+start_time = datetime.datetime.now()
+
+# Start screen
+def choose_page():
+    def on_select(page_number: int):
+        global page
+        page = page_number
+        load_settings()
+        startup.destroy()
+        main()
+
+    startup = tk.Tk()
+    startup.title("Choose Page")
+    startup.geometry("300x150")
+
+    label = tk.Label(startup, font=('Arial', 20, 'bold'), text="Vælg drinksside:")
+    label.pack(pady=10)
+
+    btn1 = tk.Button(startup, text="Normal", font=('Arial', 14, 'bold'), command=lambda: on_select(0))
+    btn1.pack(pady=5)
+
+    btn2 = tk.Button(startup, text="Shots", font=('Arial', 14, 'bold'), command=lambda: on_select(1))
+    btn2.pack(pady=5)
+
+    startup.mainloop()
+
+# Main GUI launch
 def main():
-    global root
-    # Start graph computation process
+    global root, price_vars, price_vars_str, drink_prices, purchases, all_time_purchases
+    global current_min_reset, current_max_reset
+
     graph_process = multiprocessing.Process(target=get_graph_image_process, args=[graph_queue_in, graph_queue_out])
     graph_process.start()
 
-    # Create main Tkinter window
     root = tk.Tk()
     root.title("Main Window")
     root.geometry("1920x1080")
-    for index, row in drinks_df.iterrows():
-        id = str(row['ID'])  # Convert name to string
-        price_vars.update({id: tk.IntVar(value=int(row['Starting Price']))})  # Convert to integer
-        price_vars_str.update({id: tk.StringVar(value="{:.2f}".format(row['Starting Price']))})
-    # Call display_data() to create data display window
-    display_data(root)
 
-    # Call display_background_image() to create background image window
+    price_vars = {}
+    price_vars_str = {}
+    drink_prices = {row['ID']: [row['Starting Price']] * 20 for _, row in drinks_df.iterrows()}
+    purchases = {row['ID']: 0 for _, row in drinks_df.iterrows()}
+    all_time_purchases = {row['ID']: [] for _, row in drinks_df.iterrows()}
+    current_min_reset = {row['ID']: random.uniform(row["Min. L. Price"], row["Min. U. Price"]) for _, row in drinks_df.iterrows()}
+    current_max_reset = {row['ID']: random.uniform(row["Max. L. Price"], row["Max. U. Price"]) for _, row in drinks_df.iterrows()}
+
+    for _, row in drinks_df.iterrows():
+        id = str(row['ID'])
+        price_vars[id] = tk.IntVar(value=int(row['Starting Price']))
+        price_vars_str[id] = tk.StringVar(value="{:.2f}".format(row['Starting Price']))
+
+    display_calculator(root)
     display_background_image(tk.Toplevel(root))
 
-    # Start the main event loop
     root.mainloop()
 
     graph_process.terminate()
-    graph_process.join()  # Wait for the process to terminate before exiting
+    graph_process.join()
 
-
+# Entry point
 if __name__ == "__main__":
     if sys.platform.startswith('win'):
-        # On Windows calling this function is necessary.
         multiprocessing.freeze_support()
-    main()
+    choose_page()
+
