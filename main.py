@@ -809,7 +809,12 @@ def adjust_prices():
 
     # Find the most sold item and its group
     if len(purchases) > 0:
-        most_sold_item_id = max(purchases, key=purchases.get)
+        weights = list(purchases.values())
+        # Check if all weights are the same
+        if len(set(weights)) == 1:  # All weights are equal, use uniform random selection
+            most_sold_item_id = random.choice(list(purchases.keys()))
+        else:  # Weights differ, use weighted random selection
+            most_sold_item_id = max(purchases, key=purchases.get)
         most_sold_group = drinks_df.loc[drinks_df['ID'] == most_sold_item_id, 'Group'].iloc[0]
 
     for drink_id, prices in drink_prices.items():
